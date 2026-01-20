@@ -1,18 +1,15 @@
 using UnityEngine;
+using UnityEngine.InputSystem.XR;
 
-public class CardMenu : MonoBehaviour {
+public class CancelDeckAddMenu : MonoBehaviour
+{
     [HideInInspector] public ObjectSelect controller;
-
-    private CardView selectedCard;
-
     void Awake() {
         gameObject.SetActive(false);
     }
 
-    public void Show(CardView card, Vector3 screenPosition) {
-        selectedCard = card;
+    public void Show() {
         gameObject.SetActive(true);
-        transform.position = screenPosition;
     }
 
     public void Hide() {
@@ -24,17 +21,15 @@ public class CardMenu : MonoBehaviour {
     }
 
     // Called by the AddToDeck UI button
-    public void OnAddToDeckPressed() {
+    public void OnCancelDeckAddPressed() {
         if (controller != null)
-            controller.OnCardMenuAddToDeckPressed();
+            controller.onCancelDeckAddPressed();
         else {
             // fallback: do nothing
-            Debug.LogWarning("CardMenu controller missing - cannot enter add-to-deck mode.");
+            Debug.LogWarning("CancelDeckAddMenu controller missing - cannot leave add-to-deck mode.");
         }
 
         // The menu hides; the controller will now be in ChoosingDeckForCard state.
         Hide();
     }
-
-    public CardView GetSelectedCard() { return selectedCard; }
 }
