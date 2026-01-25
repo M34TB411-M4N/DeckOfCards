@@ -1,0 +1,40 @@
+:root {
+}
+
+.header {
+    font-size: 130px;
+    -unity-text-align: upper-left;
+    margin-bottom: 150px;
+    margin-top: 100px;
+    align-self: center;
+    color: rgb(36, 19, 8);
+    -unity-font-definition: url("project://database/Assets/TextMesh%20Pro/Examples%20&%20Extras/Fonts/Roboto-Bold.ttf?fileID=12800000&guid=4beb055f07aaff244873dec698d0363e&type=3#Roboto-Bold");
+}
+
+.button {
+    font-size: 40px;
+    width: 30%;
+    height: 10%;
+    align-self: center;
+    border-top-left-radius: 10px;
+    border-top-right-radius: 10px;
+    border-bottom-right-radius: 10px;
+    border-bottom-left-radius: 10px;
+    border-left-color: rgb(0, 0, 0);
+    border-right-color: rgb(0, 0, 0);
+    border-top-color: rgb(0, 0, 0);
+    border-bottom-color: rgb(0, 0, 0);
+    border-top-width: 3px;
+    border-right-width: 3px;
+    border-bottom-width: 3px;
+    border-left-width: 3px;
+    background-color: rgb(89, 42, 31);
+    -unity-font-definition: url("project://database/Assets/TextMesh%20Pro/Examples%20&%20Extras/Fonts/Oswald-Bold.ttf?fileID=12800000&guid=c9f6d0e7bc8541498c9a4799ba184ede&type=3#Oswald-Bold");
+    margin-top: 50px;
+    color: rgb(0, 0, 0);
+}
+
+.container {
+    background-color: rgb(37, 96, 40);
+    flex-grow: 1;
+}
