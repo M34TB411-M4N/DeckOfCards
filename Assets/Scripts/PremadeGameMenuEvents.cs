@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.UIElements;
+using UnityEngine.SceneManagement;
 
 public class PremadeGameMenuEvents : MonoBehaviour {
     private UIDocument document;
@@ -35,6 +36,7 @@ public class PremadeGameMenuEvents : MonoBehaviour {
     }
 
     private void OnBackClicked(ClickEvent e) {
+        SceneManager.LoadScene("MainMenu");
         Debug.Log("back clicked");
     }
 }

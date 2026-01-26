@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.UIElements;
+using UnityEngine.SceneManagement;
 
 public class MainMenuEvents : MonoBehaviour
 {
@@ -21,10 +22,12 @@ public class MainMenuEvents : MonoBehaviour
     }
 
     private void OnOpenTableClicked(ClickEvent e) {
+        SceneManager.LoadScene("OpenTableMenu");
         Debug.Log("opentable clicked");
     }
 
     private void OnPremadeGameClicked(ClickEvent e) {
+        SceneManager.LoadScene("PremadeGameMenu");
         Debug.Log("premadegame clicked");
     }
 

@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.UIElements;
+using UnityEngine.SceneManagement;
 
 public class OpenTableMenuEvents : MonoBehaviour {
     private UIDocument document;
@@ -20,6 +21,7 @@ public class OpenTableMenuEvents : MonoBehaviour {
     }
 
     private void OnSingleplayerClicked(ClickEvent e) {
+        SceneManager.LoadScene("Table");
         Debug.Log("single clicked");
     }
 
@@ -28,6 +30,7 @@ public class OpenTableMenuEvents : MonoBehaviour {
     }
 
     private void OnBackClicked(ClickEvent e) {
+        SceneManager.LoadScene("MainMenu");
         Debug.Log("back clicked");
     }
 }
