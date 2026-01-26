@@ -38,3 +38,28 @@
     background-color: rgb(37, 96, 40);
     flex-grow: 1;
 }
+
+.back {
+    position: absolute;
+    right: auto;
+    bottom: auto;
+    left: 0;
+    top: 0;
+    margin-top: 10px;
+    margin-right: 10px;
+    margin-bottom: 10px;
+    margin-left: 10px;
+    -unity-font-definition: url("project://database/Assets/TextMesh%20Pro/Examples%20&%20Extras/Fonts/Oswald-Bold.ttf?fileID=12800000&guid=c9f6d0e7bc8541498c9a4799ba184ede&type=3#Oswald-Bold");
+    font-size: 25px;
+    width: 5%;
+    height: 5%;
+    border-top-width: 3px;
+    border-right-width: 3px;
+    border-bottom-width: 3px;
+    border-left-width: 3px;
+    border-left-color: rgb(70, 48, 37);
+    border-right-color: rgb(70, 48, 37);
+    border-top-color: rgb(70, 48, 37);
+    border-bottom-color: rgb(70, 48, 37);
+    background-color: rgb(164, 122, 66);
+}

@@ -1,0 +1,10 @@
+<ui:UXML xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements" noNamespaceSchemaLocation="../../UIElementsSchema/UIElements.xsd" editor-extension-mode="False">
+    <Style src="project://database/Assets/MenuStyle.uss?fileID=7433441132597879392&amp;guid=c1a58ef6dc0b0c249afd2fc849f4ec1c&amp;type=3#MenuStyle"/>
+    <ui:VisualElement class="container" style="flex-grow: 1;">
+        <ui:Label text="Premade Games" name="Title" class="header"/>
+        <ui:Button text="Cribbage" name="Cribbage" class="button"/>
+        <ui:Button text="Texas Hold &apos;Em" name="TexasHoldEm" class="button"/>
+        <ui:Button text="Go Fish" name="GoFish" enable-rich-text="true" class="button"/>
+        <ui:Button text="Back" name="Back" class="back"/>
+    </ui:VisualElement>
+</ui:UXML>
