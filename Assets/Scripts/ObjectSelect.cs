@@ -16,15 +16,23 @@ public class ObjectSelect : MonoBehaviour {
     [SerializeField] private CardMenu cardMenu;
     [SerializeField] private CancelDeckAddMenu cancelDeckAddMenu;
 
+    [Header("Drag Settings")]
+    [SerializeField] private float dragThreshold = 10f;
+    [SerializeField] private LayerMask floorMask;
+    [SerializeField] private Collider tableBoundsCollider;
+
     private enum InputState {
         Idle,
-        ObjectSelected,
-        DeckMenuOpen,
-        CardMenuOpen,
+        PointerDown,
+        Dragging,
         ChoosingDeckForCard
     }
 
     private InputState state = InputState.Idle;
+
+    private Vector2 pointerDownPos;
+    private Rigidbody draggedRigidbody;
+    private float lockedY;
 
     void Start() {
         if (deckMenu != null) deckMenu.controller = this;
@@ -35,107 +43,79 @@ public class ObjectSelect : MonoBehaviour {
     }
 
     void Update() {
-        if (!Input.GetMouseButtonDown(0))
-            return;
+        HandlePointer();
+    }
 
+    // -----------------------
+    // Pointer Handling
+    // -----------------------
 
-        // Ignore UI clicks entirely
-        if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject())
-            return;
+    private void HandlePointer() {
+        if (Input.GetMouseButtonDown(0)) {
+            if (!IsPointerOverUI())
+                HideAllMenus();
 
-        // ALWAYS clear previous highlight on any click
+            pointerDownPos = Input.mousePosition;
+            state = InputState.PointerDown;
+
+            TrySelectObject();
+        }
+
+        if (Input.GetMouseButton(0) && state == InputState.PointerDown) {
+            if (Vector2.Distance(pointerDownPos, Input.mousePosition) > dragThreshold) {
+                BeginDrag();
+            }
+        }
+
+        if (Input.GetMouseButton(0) && state == InputState.Dragging) {
+            UpdateDrag();
+        }
+
+        if (Input.GetMouseButtonUp(0)) {
+            EndPointer();
+        }
+    }
+
+    // -----------------------
+    // Selection
+    // -----------------------
+
+    private void TrySelectObject() {
         ClearSelectionHighlight();
-        
+
         Ray ray = GetRayOnMousePosition();
-        if (!Physics.Raycast(ray, out RaycastHit hit)) {
-            HandleClickOnEmptySpace();
+        if (!Physics.Raycast(ray, out RaycastHit hit))
             return;
-        }
 
-        GameObject clickedObject = hit.transform.gameObject;
+        GameObject obj = hit.transform.gameObject;
 
-        // Special mode: next deck click consumes selected card
+        // Special mode: choosing deck
         if (state == InputState.ChoosingDeckForCard) {
-            TryConsumeCardToDeck(clickedObject);
+            TryConsumeCardToDeck(obj);
             return;
         }
 
-        HandleNormalClick(clickedObject);
-    }
+        SelectObject(obj);
 
-    // -----------------------
-    // Click handlers
-    // -----------------------
+        selectedDeck = obj.GetComponent<Deck>();
+        selectedCardView = obj.GetComponent<CardView>();
 
-    private void HandleClickOnEmptySpace() {
-        if (state == InputState.ChoosingDeckForCard) {
-            return;
-        }
-
-        HideAllMenus();
-        ClearLogicalSelection();
-        state = InputState.Idle;
-    }
-
-    private void HandleNormalClick(GameObject clickedObject) {
-        HideAllMenus();
-        ClearLogicalSelection();
-
-        // Select object visually
-        SelectObject(clickedObject);
-
-        // Deck selection
-        Deck deck = clickedObject.GetComponent<Deck>();
-        if (deck != null) {
-            selectedDeck = deck;
-            state = InputState.DeckMenuOpen;
-
+        if (selectedDeck != null) {
             Vector3 pos = Input.mousePosition + new Vector3(100, -100);
-            deckMenu.Show(deck, pos);
-            return;
-        }
-
-        // Card selection
-        CardView card = clickedObject.GetComponent<CardView>();
-        if (card != null) {
-            selectedCardView = card;
-            state = InputState.CardMenuOpen;
-
+            deckMenu.Show(selectedDeck, pos);
+        } else if (selectedCardView != null) {
             Vector3 pos = Input.mousePosition + new Vector3(100, -100);
-            cardMenu.Show(card, pos);
-            return;
+            cardMenu.Show(selectedCardView, pos);
         }
-
-        // Some other selectable object
-        state = InputState.ObjectSelected;
     }
-
-    private void TryConsumeCardToDeck(GameObject clickedObject) {
-        Deck deck = clickedObject.GetComponent<Deck>();
-        if (deck == null || selectedCardView == null) {
-            Debug.Log("Click a deck to add the card, or click empty space to cancel.");
-            return;
-        }
-
-        deck.AddCard(selectedCardView.GetCardData());
-        Destroy(selectedCardView.gameObject);
-
-        selectedCardView = null;
-        HideAllMenus();
-        state = InputState.Idle;
-    }
-
-    // -----------------------
-    // Selection helpers
-    // -----------------------
 
     private void SelectObject(GameObject obj) {
         selectedObject = obj;
 
-        MeshRenderer renderer = selectedObject.GetComponent<MeshRenderer>();
-        if (renderer != null) {
-            prevMat = renderer.material;
-            renderer.material = selectedMat;
+        MeshRenderer r = selectedObject.GetComponent<MeshRenderer>();
+        if (r != null) {
+            prevMat = r.material;
+            r.material = selectedMat;
         }
     }
 
@@ -143,32 +123,82 @@ public class ObjectSelect : MonoBehaviour {
         if (selectedObject == null)
             return;
 
-        MeshRenderer renderer = selectedObject.GetComponent<MeshRenderer>();
-        if (renderer != null)
-            renderer.material = prevMat;
+        MeshRenderer r = selectedObject.GetComponent<MeshRenderer>();
+        if (r != null)
+            r.material = prevMat;
 
         selectedObject = null;
     }
 
-    private void ClearLogicalSelection() {
-        selectedDeck = null;
-        selectedCardView = null;
+    // -----------------------
+    // Dragging
+    // -----------------------
+
+    private void BeginDrag() {
+        if (selectedObject == null)
+            return;
+
+        draggedRigidbody = selectedObject.GetComponent<Rigidbody>();
+        if (draggedRigidbody == null)
+            return;
+
+        HideAllMenus();
+
+        lockedY = selectedObject.transform.position.y;
+
+        draggedRigidbody.isKinematic = true;
+        draggedRigidbody.velocity = Vector3.zero;
+        draggedRigidbody.angularVelocity = Vector3.zero;
+
+        state = InputState.Dragging;
     }
 
-    private void HideAllMenus() {
-        if (deckMenu != null && deckMenu.GetActive())
-            deckMenu.Hide();
+    private void UpdateDrag() {
+        Ray ray = GetRayOnMousePosition();
+        if (!Physics.Raycast(ray, out RaycastHit hit, 100f, floorMask))
+            return;
 
-        if (cardMenu != null && cardMenu.GetActive())
-            cardMenu.Hide();
+        Vector3 target = hit.point;
+        target.y = lockedY;
 
-        if (cancelDeckAddMenu != null && cancelDeckAddMenu.GetActive())
-            cancelDeckAddMenu.Hide();
+        if (tableBoundsCollider != null) {
+            Bounds b = tableBoundsCollider.bounds;
+            target.x = Mathf.Clamp(target.x, b.min.x, b.max.x);
+            target.z = Mathf.Clamp(target.z, b.min.z, b.max.z);
+        }
+
+        draggedRigidbody.MovePosition(target);
     }
 
+    private void EndPointer() {
+        if (state == InputState.Dragging && draggedRigidbody != null) {
+            draggedRigidbody.isKinematic = false;
+            draggedRigidbody.velocity = Vector3.zero;
+            draggedRigidbody.angularVelocity = Vector3.zero;
+        }
+
+        draggedRigidbody = null;
+        state = InputState.Idle;
+    }
 
     // -----------------------
-    // Menu callbacks
+    // Card > Deck Flow
+    // -----------------------
+
+    private void TryConsumeCardToDeck(GameObject obj) {
+        Deck deck = obj.GetComponent<Deck>();
+        if (deck == null || selectedCardView == null)
+            return;
+
+        deck.AddCard(selectedCardView.GetCardData());
+        Destroy(selectedCardView.gameObject);
+
+        selectedCardView = null;
+        state = InputState.Idle;
+    }
+
+    // -----------------------
+    // Menu Callbacks
     // -----------------------
 
     public void OnDeckMenuDrawPressed() {
@@ -195,8 +225,24 @@ public class ObjectSelect : MonoBehaviour {
     }
 
     // -----------------------
-    // Utility
+    // Utilities
     // -----------------------
+
+    private void HideAllMenus() {
+        if (deckMenu != null && deckMenu.GetActive())
+            deckMenu.Hide();
+
+        if (cardMenu != null && cardMenu.GetActive())
+            cardMenu.Hide();
+
+        if (cancelDeckAddMenu != null && cancelDeckAddMenu.GetActive())
+            cancelDeckAddMenu.Hide();
+    }
+
+    private bool IsPointerOverUI() {
+        return EventSystem.current != null &&
+               EventSystem.current.IsPointerOverGameObject();
+    }
 
     private Ray GetRayOnMousePosition() {
         return Camera.main.ScreenPointToRay(Input.mousePosition);
