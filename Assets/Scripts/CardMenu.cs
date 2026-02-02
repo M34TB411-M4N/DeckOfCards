@@ -26,7 +26,7 @@ public class CardMenu : MonoBehaviour {
     // Called by the AddToDeck UI button
     public void OnAddToDeckPressed() {
         if (controller != null)
-            controller.OnCardMenuAddToDeckPressed();
+        controller.OnCardMenuAddToDeckPressed();
         else {
             // fallback: do nothing
             Debug.LogWarning("CardMenu controller missing - cannot enter add-to-deck mode.");

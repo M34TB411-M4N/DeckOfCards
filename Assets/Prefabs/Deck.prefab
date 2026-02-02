@@ -14,6 +14,7 @@ GameObject:
   - component: {fileID: 2335711006279177761}
   - component: {fileID: 7724686144200636237}
   - component: {fileID: -7393578911156863217}
+  - component: {fileID: 4584279855422870240}
   m_Layer: 0
   m_Name: Deck
   m_TagString: Untagged
@@ -139,8 +140,8 @@ Rigidbody:
   m_GameObject: {fileID: 2917818905663290176}
   serializedVersion: 5
   m_Mass: 1
-  m_LinearDamping: 0
-  m_AngularDamping: 0.05
+  m_LinearDamping: 0.75
+  m_AngularDamping: 3
   m_CenterOfMass: {x: 0, y: 0, z: 0}
   m_InertiaTensor: {x: 1, y: 1, z: 1}
   m_InertiaRotation: {x: 0, y: 0, z: 0, w: 1}
@@ -155,5 +156,17 @@ Rigidbody:
   m_UseGravity: 1
   m_IsKinematic: 0
   m_Interpolate: 1
-  m_Constraints: 112
+  m_Constraints: 0
   m_CollisionDetection: 2
+--- !u!114 &4584279855422870240
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2917818905663290176}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 600e075d46683a842912075a61169a13, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::StopAfterCollision

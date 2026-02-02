@@ -27,7 +27,7 @@ public class DeckMenu : MonoBehaviour {
     // Button callback wired in inspector (Draw)
     // The menu delegates the action to the controller (state machine)
     public void OnDrawCardPressed() {
-        if (controller != null)
+        if (controller != null) 
             controller.OnDeckMenuDrawPressed();
         else {
             // fallback behavior (not recommended)

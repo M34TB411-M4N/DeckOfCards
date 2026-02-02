@@ -22,7 +22,7 @@ public class CancelDeckAddMenu : MonoBehaviour
 
     // Called by the AddToDeck UI button
     public void OnCancelDeckAddPressed() {
-        if (controller != null)
+        if (controller != null) 
             controller.onCancelDeckAddPressed();
         else {
             // fallback: do nothing

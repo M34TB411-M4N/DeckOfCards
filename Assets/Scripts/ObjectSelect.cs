@@ -15,31 +15,34 @@ public class ObjectSelect : MonoBehaviour {
     [SerializeField] private CardMenu cardMenu;
     [SerializeField] private CancelDeckAddMenu cancelDeckAddMenu;
 
-    [Header("Drag Settings")]
+    [Header("Drag")]
     [SerializeField] private float dragThresholdPixels = 8f;
+    [SerializeField] private float maxDragSpeed = 10f;
+    [SerializeField] private float dragResponsiveness = 25f;
+
+    [Header("Bounds")]
+    [SerializeField] private float boundsPushForce = 40f;
 
     private enum InputState {
         Idle,
         PressedObject,
-        DeckDragging,
-        CardDragging,
+        Dragging,
         ChoosingDeckForCard
     }
 
     private InputState state = InputState.Idle;
 
-    // pointer / press tracking
     private Vector2 pressScreenPos;
-    private GameObject pressedCandidate;    // object under pointer on pointer-down (no selection yet)
-    private GameObject pressedObject;       // object being dragged once drag begins
-    private Rigidbody pressedRb;
+    private GameObject pressedCandidate;
 
-    // drag math
+    private Rigidbody draggedRb;
+    private RigidbodyConstraints savedConstraints;
+    private DraggedMarker draggedMarker; // marker we add while dragging
+
     private Plane dragPlane;
     private Vector3 dragOffset;
     private float lockedY;
 
-    // table collider for bounds
     private Collider tableCollider;
 
     void Start() {
@@ -58,9 +61,238 @@ public class ObjectSelect : MonoBehaviour {
         HandlePointer();
     }
 
-    // --------------------------
-    // Input helpers (mouse + touch)
-    // --------------------------
+    void FixedUpdate() {
+        if (state == InputState.Dragging && draggedRb != null) {
+            ApplyDragVelocity();
+            ApplySoftBounds();
+        }
+    }
+
+    // --------------------
+    // Input
+    // --------------------
+
+    private void HandlePointer() {
+        if (PointerDown()) {
+            if (!IsPointerOverUI()) {
+                HideAllMenus();
+                ClearSelectionHighlight();
+            }
+
+            pressScreenPos = PointerPosition();
+            state = InputState.PressedObject;
+
+            pressedCandidate = null;
+            Ray ray = GetRayOnPointer();
+            if (Physics.Raycast(ray, out RaycastHit hit)) {
+                pressedCandidate = hit.collider.gameObject;
+                lockedY = pressedCandidate.transform.position.y;
+                dragPlane = new Plane(Vector3.up, new Vector3(0f, lockedY, 0f));
+            }
+        }
+
+        if (PointerHeld() && state == InputState.PressedObject) {
+            if (Vector2.Distance(pressScreenPos, PointerPosition()) >= dragThresholdPixels) {
+                BeginDrag();
+            }
+        }
+
+        if (PointerUp()) {
+            if (state == InputState.PressedObject) {
+                ConfirmClick();
+            }
+
+            EndDrag();
+            state = InputState.Idle;
+        }
+    }
+
+    // --------------------
+    // Dragging
+    // --------------------
+
+    private void BeginDrag() {
+        if (pressedCandidate == null)
+            return;
+
+        draggedRb = pressedCandidate.GetComponent<Rigidbody>();
+        if (draggedRb == null)
+            return;
+
+        // mark dragged object so other objects can notice collisions with it
+        draggedMarker = pressedCandidate.GetComponent<DraggedMarker>();
+        if (draggedMarker == null)
+            draggedMarker = pressedCandidate.AddComponent<DraggedMarker>();
+
+        draggedRb.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
+        draggedRb.interpolation = RigidbodyInterpolation.Interpolate;
+
+        // Freeze rotation ONLY for the dragged object so PO doesn't spin while being moved
+        savedConstraints = draggedRb.constraints;
+        draggedRb.constraints = RigidbodyConstraints.FreezeRotation;
+
+        Ray ray = GetRayOnPointer();
+        if (dragPlane.Raycast(ray, out float enter)) {
+            Vector3 hitPoint = ray.GetPoint(enter);
+            dragOffset = draggedRb.position - hitPoint;
+        }
+
+        state = InputState.Dragging;
+    }
+
+    private void ApplyDragVelocity() {
+        Ray ray = GetRayOnPointer();
+        if (!dragPlane.Raycast(ray, out float enter))
+            return;
+
+        Vector3 target = ray.GetPoint(enter) + dragOffset;
+        target.y = lockedY;
+
+        Vector3 toTarget = target - draggedRb.position;
+
+        // desired velocity tries to reach the target in a single fixed step scaled by responsiveness
+        Vector3 desiredVelocity = toTarget * dragResponsiveness;
+        if (desiredVelocity.magnitude > maxDragSpeed)
+            desiredVelocity = desiredVelocity.normalized * maxDragSpeed;
+
+        // Smoothly pull toward desired velocity but do not apply forces to other objects directly
+        draggedRb.linearVelocity = Vector3.Lerp(
+            draggedRb.linearVelocity,
+            desiredVelocity,
+            Time.fixedDeltaTime * dragResponsiveness
+        );
+    }
+
+    private void ApplySoftBounds() {
+        if (tableCollider == null)
+            return;
+
+        Bounds tb = tableCollider.bounds;
+        Vector3 pos = draggedRb.position;
+        Vector3 push = Vector3.zero;
+
+        if (pos.x < tb.min.x) push.x = 1f;
+        else if (pos.x > tb.max.x) push.x = -1f;
+
+        if (pos.z < tb.min.z) push.z = 1f;
+        else if (pos.z > tb.max.z) push.z = -1f;
+
+        if (push != Vector3.zero)
+            draggedRb.AddForce(push.normalized * boundsPushForce, ForceMode.Acceleration);
+    }
+
+    private void EndDrag() {
+        if (draggedRb != null) {
+            // restore saved rotation constraints
+            draggedRb.constraints = savedConstraints;
+
+            // ensure PO stops completely when user releases
+            draggedRb.linearVelocity = Vector3.zero;
+            draggedRb.angularVelocity = Vector3.zero;
+        }
+
+        // remove marker component if present
+        if (draggedMarker != null) {
+            Destroy(draggedMarker);
+            draggedMarker = null;
+        }
+
+        draggedRb = null;
+        pressedCandidate = null;
+    }
+
+    // --------------------
+    // Click logic
+    // --------------------
+
+    private void ConfirmClick() {
+        if (pressedCandidate == null)
+            return;
+
+        ClearLogicalSelection();
+        SelectObject(pressedCandidate);
+
+        Deck d = pressedCandidate.GetComponent<Deck>();
+        if (d != null) {
+            selectedDeck = d;
+            deckMenu.Show(d, PointerPosition() + new Vector2(100f, -100f));
+            return;
+        }
+
+        CardView cv = pressedCandidate.GetComponent<CardView>();
+        if (cv != null) {
+            selectedCardView = cv;
+            cardMenu.Show(cv, PointerPosition() + new Vector2(100f, -100f));
+        }
+    }
+
+    // --------------------
+    // Menu callbacks (restored)
+    // --------------------
+
+    public void OnDeckMenuDrawPressed() {
+        if (selectedDeck == null)
+            return;
+
+        selectedDeck.DrawCard();
+        HideAllMenus();
+        state = InputState.Idle;
+    }
+
+    public void OnCardMenuAddToDeckPressed() {
+        if (selectedCardView == null)
+            return;
+
+        HideAllMenus();
+        cancelDeckAddMenu.Show();
+        state = InputState.ChoosingDeckForCard;
+    }
+
+    public void onCancelDeckAddPressed() {
+        HideAllMenus();
+        state = InputState.Idle;
+    }
+
+    // --------------------
+    // Helpers
+    // --------------------
+
+    private void SelectObject(GameObject obj) {
+        selectedObject = obj;
+        MeshRenderer mr = obj.GetComponent<MeshRenderer>();
+        if (mr != null) {
+            prevMat = mr.material;
+            mr.material = selectedMat;
+        }
+    }
+
+    private void ClearSelectionHighlight() {
+        if (selectedObject == null)
+            return;
+
+        MeshRenderer mr = selectedObject.GetComponent<MeshRenderer>();
+        if (mr != null && prevMat != null)
+            mr.material = prevMat;
+
+        selectedObject = null;
+        prevMat = null;
+    }
+
+    private void ClearLogicalSelection() {
+        selectedDeck = null;
+        selectedCardView = null;
+    }
+
+    private void HideAllMenus() {
+        if (deckMenu != null && deckMenu.GetActive()) deckMenu.Hide();
+        if (cardMenu != null && cardMenu.GetActive()) cardMenu.Hide();
+        if (cancelDeckAddMenu != null && cancelDeckAddMenu.GetActive()) cancelDeckAddMenu.Hide();
+    }
+
+    // --------------------
+    // Input utils
+    // --------------------
+
     Vector2 PointerPosition() {
 #if UNITY_ANDROID
         return Input.touchCount > 0 ? Input.GetTouch(0).position : Vector2.zero;
@@ -79,7 +311,9 @@ public class ObjectSelect : MonoBehaviour {
 
     bool PointerHeld() {
 #if UNITY_ANDROID
-        return Input.touchCount > 0 && (Input.GetTouch(0).phase == TouchPhase.Moved || Input.GetTouch(0).phase == TouchPhase.Stationary);
+        return Input.touchCount > 0 &&
+               (Input.GetTouch(0).phase == TouchPhase.Moved ||
+                Input.GetTouch(0).phase == TouchPhase.Stationary);
 #else
         return Input.GetMouseButton(0);
 #endif
@@ -93,253 +327,6 @@ public class ObjectSelect : MonoBehaviour {
 #endif
     }
 
-    private void HandlePointer() {
-        // Pointer down: record candidate but do not select yet.
-        if (PointerDown()) {
-            // If pointer is over UI, do nothing (keep menus)
-            if (IsPointerOverUI()) {
-                // do not change menus or selection
-            } else {
-                // new interaction, clear context
-                HideAllMenus();
-                ClearSelectionHighlight();
-            }
-
-            pressScreenPos = PointerPosition();
-            state = InputState.PressedObject;
-
-            // record the candidate (no selection yet)
-            pressedCandidate = null;
-            Ray ray = GetRayOnPointer();
-            if (Physics.Raycast(ray, out RaycastHit hit)) {
-                pressedCandidate = hit.collider.gameObject;
-                // prepare locked Y for drag if it starts
-                lockedY = pressedCandidate.transform.position.y;
-                dragPlane = new Plane(Vector3.up, new Vector3(0f, lockedY, 0f));
-                // do NOT compute dragOffset yet; compute in BeginDrag to avoid snap if pointer moved
-            }
-        }
-
-        // Pointer held: check threshold to start drag
-        if (PointerHeld() && state == InputState.PressedObject) {
-            if (Vector2.Distance(pressScreenPos, PointerPosition()) >= dragThresholdPixels) {
-                BeginDrag();
-            }
-        }
-
-        // While dragging, update object
-        if (state == InputState.DeckDragging || state == InputState.CardDragging) {
-            if (PointerHeld())
-                DragObjectPhysics();
-        }
-
-        // Pointer up: either confirm click or end drag
-        if (PointerUp()) {
-            if (state == InputState.PressedObject) {
-                // pointer released without exceeding threshold -> confirmed click
-                ConfirmClick();
-            } else if (state == InputState.DeckDragging || state == InputState.CardDragging) {
-                EndDrag();
-            }
-
-            // cleanup
-            pressedCandidate = null;
-            pressedObject = null;
-            pressedRb = null;
-            state = InputState.Idle;
-        }
-    }
-
-    // --------------------------
-    // Drag lifecycle
-    // --------------------------
-    private void BeginDrag() {
-        if (pressedCandidate == null) {
-            state = InputState.Idle;
-            return;
-        }
-
-        // choose the dragged object
-        pressedObject = pressedCandidate;
-        pressedRb = pressedObject.GetComponent<Rigidbody>();
-        if (pressedRb == null) {
-            // cannot drag objects without rigidbody in this system
-            pressedObject = null;
-            pressedRb = null;
-            state = InputState.Idle;
-            return;
-        }
-
-        // compute offset so object doesn't jump to pointer
-        Ray ray = GetRayOnPointer();
-        if (dragPlane.Raycast(ray, out float enter)) {
-            Vector3 hitPoint = ray.GetPoint(enter);
-            dragOffset = pressedObject.transform.position - hitPoint;
-        } else {
-            dragOffset = Vector3.zero;
-        }
-
-        // decide drag type
-        if (pressedObject.GetComponent<Deck>() != null)
-            state = InputState.DeckDragging;
-        else if (pressedObject.GetComponent<CardView>() != null)
-            state = InputState.CardDragging;
-        else
-            state = InputState.Idle;
-    }
-
-    private void DragObjectPhysics() {
-        if (pressedRb == null || pressedObject == null)
-            return;
-
-        Ray ray = GetRayOnPointer();
-        Vector3 worldPoint;
-        // use plane intersection if possible
-        if (dragPlane.Raycast(ray, out float enter))
-            worldPoint = ray.GetPoint(enter);
-        else
-            return;
-
-        Vector3 target = worldPoint + dragOffset;
-        target.y = lockedY;
-
-        // clamp by table bounds using object's extents
-        if (tableCollider != null) {
-            Bounds tableB = tableCollider.bounds;
-            Collider objCol = pressedObject.GetComponent<Collider>();
-            if (objCol != null) {
-                Bounds objB = objCol.bounds;
-                float halfX = objB.extents.x;
-                float halfZ = objB.extents.z;
-
-                target.x = Mathf.Clamp(target.x, tableB.min.x + halfX, tableB.max.x - halfX);
-                target.z = Mathf.Clamp(target.z, tableB.min.z + halfZ, tableB.max.z - halfZ);
-            } else {
-                // fallback: clamp center
-                target.x = Mathf.Clamp(target.x, tableB.min.x, tableB.max.x);
-                target.z = Mathf.Clamp(target.z, tableB.min.z, tableB.max.z);
-            }
-        }
-
-        // Move via physics (keeps collisions correct)
-        pressedRb.MovePosition(target);
-    }
-
-    private void EndDrag() {
-        if (pressedRb != null) {
-            // stop residual motion to avoid glide
-            pressedRb.linearVelocity = Vector3.zero;
-            pressedRb.angularVelocity = Vector3.zero;
-        }
-    }
-
-    // --------------------------
-    // Click confirmation (selection & menus)
-    // --------------------------
-    private void ConfirmClick() {
-        if (pressedCandidate == null)
-            return;
-
-        // If choosing deck to add a card, that flow takes precedence
-        if (state == InputState.ChoosingDeckForCard) {
-            TryConsumeCardToDeck(pressedCandidate);
-            return;
-        }
-
-        // Normal click: select and show menu
-        ClearLogicalSelection();
-        SelectObject(pressedCandidate);
-
-        Deck d = pressedCandidate.GetComponent<Deck>();
-        if (d != null) {
-            selectedDeck = d;
-            Vector3 pos = PointerPosition() + new Vector2(100f, -100f);
-            deckMenu.Show(d, pos);
-            return;
-        }
-
-        CardView cv = pressedCandidate.GetComponent<CardView>();
-        if (cv != null) {
-            selectedCardView = cv;
-            Vector3 pos = PointerPosition() + new Vector2(100f, -100f);
-            cardMenu.Show(cv, pos);
-        }
-    }
-
-    // --------------------------
-    // Card to Deck flow
-    // --------------------------
-    private void TryConsumeCardToDeck(GameObject clickedObject) {
-        Deck deck = clickedObject.GetComponent<Deck>();
-        if (deck == null || selectedCardView == null)
-            return;
-
-        deck.AddCard(selectedCardView.GetCardData());
-        Destroy(selectedCardView.gameObject);
-
-        selectedCardView = null;
-        HideAllMenus();
-        state = InputState.Idle;
-    }
-
-    // --------------------------
-    // Selection helpers and menus
-    // --------------------------
-    private void SelectObject(GameObject obj) {
-        selectedObject = obj;
-        MeshRenderer mr = selectedObject.GetComponent<MeshRenderer>();
-        if (mr != null) {
-            prevMat = mr.material;
-            mr.material = selectedMat;
-        }
-    }
-
-    private void ClearSelectionHighlight() {
-        if (selectedObject == null)
-            return;
-        MeshRenderer mr = selectedObject.GetComponent<MeshRenderer>();
-        if (mr != null && prevMat != null)
-            mr.material = prevMat;
-        selectedObject = null;
-        prevMat = null;
-    }
-
-    private void ClearLogicalSelection() {
-        selectedDeck = null;
-        selectedCardView = null;
-    }
-
-    private void HideAllMenus() {
-        if (deckMenu != null && deckMenu.GetActive()) deckMenu.Hide();
-        if (cardMenu != null && cardMenu.GetActive()) cardMenu.Hide();
-        if (cancelDeckAddMenu != null && cancelDeckAddMenu.GetActive()) cancelDeckAddMenu.Hide();
-    }
-
-    // --------------------------
-    // Menu callbacks
-    // --------------------------
-    public void OnDeckMenuDrawPressed() {
-        if (selectedDeck == null) return;
-        selectedDeck.DrawCard();
-        HideAllMenus();
-        state = InputState.Idle;
-    }
-
-    public void OnCardMenuAddToDeckPressed() {
-        if (selectedCardView == null) return;
-        HideAllMenus();
-        cancelDeckAddMenu.Show();
-        state = InputState.ChoosingDeckForCard;
-    }
-
-    public void onCancelDeckAddPressed() {
-        HideAllMenus();
-        state = InputState.Idle;
-    }
-
-    // --------------------------
-    // Utility
-    // --------------------------
     private Ray GetRayOnPointer() {
 #if UNITY_ANDROID
         return Camera.main.ScreenPointToRay(Input.GetTouch(0).position);
@@ -347,6 +334,7 @@ public class ObjectSelect : MonoBehaviour {
         return Camera.main.ScreenPointToRay(Input.mousePosition);
 #endif
     }
+
     private bool IsPointerOverUI() {
         return EventSystem.current != null && EventSystem.current.IsPointerOverGameObject();
     }
