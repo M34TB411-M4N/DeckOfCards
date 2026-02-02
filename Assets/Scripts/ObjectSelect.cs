@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.EventSystems;
+using System.Collections;
 
 public class ObjectSelect : MonoBehaviour {
     [Header("Selection")]
@@ -38,6 +39,9 @@ public class ObjectSelect : MonoBehaviour {
     private Rigidbody draggedRb;
     private RigidbodyConstraints savedConstraints;
     private DraggedMarker draggedMarker; // marker we add while dragging
+
+    [SerializeField] private float markerKeepTime = 0.15f; // how long to keep marker after release
+    private Coroutine removeMarkerCoroutine = null;
 
     private Plane dragPlane;
     private Vector3 dragOffset;
@@ -124,6 +128,11 @@ public class ObjectSelect : MonoBehaviour {
         if (draggedMarker == null)
             draggedMarker = pressedCandidate.AddComponent<DraggedMarker>();
 
+        if (removeMarkerCoroutine != null) {
+            StopCoroutine(removeMarkerCoroutine);
+            removeMarkerCoroutine = null;
+        }
+
         draggedRb.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
         draggedRb.interpolation = RigidbodyInterpolation.Interpolate;
 
@@ -181,6 +190,19 @@ public class ObjectSelect : MonoBehaviour {
             draggedRb.AddForce(push.normalized * boundsPushForce, ForceMode.Acceleration);
     }
 
+    private IEnumerator RemoveDraggedMarkerAfterDelay(GameObject markerObject, float delay) {
+        yield return new WaitForSeconds(delay);
+
+        if (markerObject != null) {
+            DraggedMarker m = markerObject.GetComponent<DraggedMarker>();
+            if (m != null) {
+                Destroy(m);
+            }
+        }
+
+        removeMarkerCoroutine = null;
+    }
+
     private void EndDrag() {
         if (draggedRb != null) {
             // restore saved rotation constraints
@@ -193,7 +215,11 @@ public class ObjectSelect : MonoBehaviour {
 
         // remove marker component if present
         if (draggedMarker != null) {
-            Destroy(draggedMarker);
+            // avoid multiple coroutines for the same object
+            if (removeMarkerCoroutine != null)
+                StopCoroutine(removeMarkerCoroutine);
+
+            removeMarkerCoroutine = StartCoroutine(RemoveDraggedMarkerAfterDelay(draggedMarker.gameObject, markerKeepTime));
             draggedMarker = null;
         }
 
