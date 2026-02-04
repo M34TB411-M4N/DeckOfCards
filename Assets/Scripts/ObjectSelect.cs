@@ -125,6 +125,7 @@ public class ObjectSelect : MonoBehaviour {
 
         // mark dragged object so other objects can notice collisions with it
         draggedMarker = pressedCandidate.GetComponent<DraggedMarker>();
+        pressedCandidate.GetComponent<HoverWhileDragged>().BeginHover();
         if (draggedMarker == null)
             draggedMarker = pressedCandidate.AddComponent<DraggedMarker>();
 
@@ -204,6 +205,7 @@ public class ObjectSelect : MonoBehaviour {
     }
 
     private void EndDrag() {
+        pressedCandidate.GetComponent<HoverWhileDragged>().EndHover();
         if (draggedRb != null) {
             // restore saved rotation constraints
             draggedRb.constraints = savedConstraints;

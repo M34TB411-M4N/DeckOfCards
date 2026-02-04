@@ -15,7 +15,8 @@ GameObject:
   - component: {fileID: 7724686144200636237}
   - component: {fileID: -7393578911156863217}
   - component: {fileID: 4584279855422870240}
-  m_Layer: 0
+  - component: {fileID: -1708508263576704017}
+  m_Layer: 8
   m_Name: Deck
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -170,3 +171,21 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 600e075d46683a842912075a61169a13, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::StopAfterCollision
+  linearDampingDuringContact: 0.45
+--- !u!114 &-1708508263576704017
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2917818905663290176}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: aa09cf60674d11549b983c5df6ebc101, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::HoverWhileDragged
+  hoverHeight: 5
+  hoverResponsiveness: 25
+  hoverSurfaceMask:
+    serializedVersion: 2
+    m_Bits: 256

@@ -15,7 +15,8 @@ GameObject:
   - component: {fileID: 191621562567231915}
   - component: {fileID: 8017351637398783787}
   - component: {fileID: -6571968735660500594}
-  m_Layer: 0
+  - component: {fileID: -1457953339572650643}
+  m_Layer: 8
   m_Name: Card
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -169,3 +170,20 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::StopAfterCollision
   linearDampingDuringContact: 0.45
+--- !u!114 &-1457953339572650643
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 9113979296879819522}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: aa09cf60674d11549b983c5df6ebc101, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::HoverWhileDragged
+  hoverHeight: 5
+  hoverResponsiveness: 25
+  hoverSurfaceMask:
+    serializedVersion: 2
+    m_Bits: 256
