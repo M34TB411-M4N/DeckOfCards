@@ -184,8 +184,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: aa09cf60674d11549b983c5df6ebc101, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::HoverWhileDragged
-  hoverHeight: 5
-  hoverResponsiveness: 25
+  hoverHeight: 3
+  responsiveness: 20
   hoverSurfaceMask:
     serializedVersion: 2
     m_Bits: 256
+  lateralUpdateThreshold: 0.05
+  updateInterval: 0.08

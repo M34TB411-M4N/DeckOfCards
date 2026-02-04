@@ -24,6 +24,8 @@ public class ObjectSelect : MonoBehaviour {
     [Header("Bounds")]
     [SerializeField] private float boundsPushForce = 40f;
 
+    private HoverWhileDragged hoverComponent = null;
+
     private enum InputState {
         Idle,
         PressedObject,
@@ -37,7 +39,7 @@ public class ObjectSelect : MonoBehaviour {
     private GameObject pressedCandidate;
 
     private Rigidbody draggedRb;
-    private RigidbodyConstraints savedConstraints;
+    // removed savedConstraints — Hover handles constraints now
     private DraggedMarker draggedMarker; // marker we add while dragging
 
     [SerializeField] private float markerKeepTime = 0.15f; // how long to keep marker after release
@@ -90,8 +92,6 @@ public class ObjectSelect : MonoBehaviour {
             Ray ray = GetRayOnPointer();
             if (Physics.Raycast(ray, out RaycastHit hit)) {
                 pressedCandidate = hit.collider.gameObject;
-                lockedY = pressedCandidate.transform.position.y;
-                dragPlane = new Plane(Vector3.up, new Vector3(0f, lockedY, 0f));
             }
         }
 
@@ -123,12 +123,19 @@ public class ObjectSelect : MonoBehaviour {
         if (draggedRb == null)
             return;
 
-        // mark dragged object so other objects can notice collisions with it
+        // Get or add marker for collision detection with ROs
         draggedMarker = pressedCandidate.GetComponent<DraggedMarker>();
-        pressedCandidate.GetComponent<HoverWhileDragged>().BeginHover();
+
+        // get hover component (if present) and start hover BEFORE we start moving
+        hoverComponent = pressedCandidate.GetComponent<HoverWhileDragged>();
+        if (hoverComponent != null) {
+            hoverComponent.BeginHover();
+        }
+
         if (draggedMarker == null)
             draggedMarker = pressedCandidate.AddComponent<DraggedMarker>();
 
+        // If a delayed-remove coroutine was pending, cancel it
         if (removeMarkerCoroutine != null) {
             StopCoroutine(removeMarkerCoroutine);
             removeMarkerCoroutine = null;
@@ -137,10 +144,7 @@ public class ObjectSelect : MonoBehaviour {
         draggedRb.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
         draggedRb.interpolation = RigidbodyInterpolation.Interpolate;
 
-        // Freeze rotation ONLY for the dragged object so PO doesn't spin while being moved
-        savedConstraints = draggedRb.constraints;
-        draggedRb.constraints = RigidbodyConstraints.FreezeRotation;
-
+        // compute drag offset so the object doesn't snap
         Ray ray = GetRayOnPointer();
         if (dragPlane.Raycast(ray, out float enter)) {
             Vector3 hitPoint = ray.GetPoint(enter);
@@ -152,29 +156,35 @@ public class ObjectSelect : MonoBehaviour {
 
     private void ApplyDragVelocity() {
         Ray ray = GetRayOnPointer();
-        if (!dragPlane.Raycast(ray, out float enter))
+
+        // Raycast against the table only to get X/Z intent
+        if (!Physics.Raycast(ray, out RaycastHit hit, 100f))
             return;
 
-        Vector3 target = ray.GetPoint(enter) + dragOffset;
-        target.y = lockedY;
+        Vector3 targetXZ = new Vector3(
+            hit.point.x,
+            draggedRb.position.y, // hover owns Y
+            hit.point.z
+        );
 
-        Vector3 toTarget = target - draggedRb.position;
+        Vector3 toTarget = targetXZ - draggedRb.position;
+        toTarget.y = 0f;
 
-        // desired velocity tries to reach the target in a single fixed step scaled by responsiveness
         Vector3 desiredVelocity = toTarget * dragResponsiveness;
         if (desiredVelocity.magnitude > maxDragSpeed)
             desiredVelocity = desiredVelocity.normalized * maxDragSpeed;
 
-        // Smoothly pull toward desired velocity but do not apply forces to other objects directly
-        draggedRb.linearVelocity = Vector3.Lerp(
-            draggedRb.linearVelocity,
-            desiredVelocity,
-            Time.fixedDeltaTime * dragResponsiveness
-        );
+        Vector3 v = draggedRb.linearVelocity;
+        v.x = desiredVelocity.x;
+        v.z = desiredVelocity.z;
+
+        draggedRb.linearVelocity = v;
     }
 
+
+
     private void ApplySoftBounds() {
-        if (tableCollider == null)
+        if (tableCollider == null || draggedRb == null)
             return;
 
         Bounds tb = tableCollider.bounds;
@@ -205,19 +215,26 @@ public class ObjectSelect : MonoBehaviour {
     }
 
     private void EndDrag() {
-        pressedCandidate.GetComponent<HoverWhileDragged>().EndHover();
-        if (draggedRb != null) {
-            // restore saved rotation constraints
-            draggedRb.constraints = savedConstraints;
+        // First: tell hover to stop and restore constraints/gravity so the body is back to physics control
+        if (hoverComponent != null) {
+            hoverComponent.EndHover();
+            hoverComponent = null;
+        }
 
-            // ensure PO stops completely when user releases
-            draggedRb.linearVelocity = Vector3.zero;
+        if (draggedRb != null) {
+            // Do not restore constraints here — Hover restored them.
+            // Zero horizontal velocity but keep or enforce a small downward Y so gravity starts working
+            Vector3 cur = draggedRb.linearVelocity;
+            cur.x = 0f;
+            cur.z = 0f;
+
+            // Optionally stop any angular spin introduced while dragging
+            // This makes released objects more stable; remove this line if you want release-spin preserved.
             draggedRb.angularVelocity = Vector3.zero;
         }
 
-        // remove marker component if present
+        // schedule marker removal if present (short grace period to let RO exit/dampen)
         if (draggedMarker != null) {
-            // avoid multiple coroutines for the same object
             if (removeMarkerCoroutine != null)
                 StopCoroutine(removeMarkerCoroutine);
 
@@ -225,6 +242,7 @@ public class ObjectSelect : MonoBehaviour {
             draggedMarker = null;
         }
 
+        // Clear references
         draggedRb = null;
         pressedCandidate = null;
     }
