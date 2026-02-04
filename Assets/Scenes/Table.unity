@@ -1900,7 +1900,7 @@ GameObject:
   - component: {fileID: 1518972164}
   - component: {fileID: 1518972163}
   - component: {fileID: 1518972165}
-  m_Layer: 0
+  m_Layer: 8
   m_Name: Floor
   m_TagString: Floor
   m_Icon: {fileID: 0}
@@ -2037,6 +2037,7 @@ MonoBehaviour:
   maxDragSpeed: 50
   dragResponsiveness: 75
   boundsPushForce: 30
+  markerKeepTime: 0.15
 --- !u!4 &1782618115
 Transform:
   m_ObjectHideFlags: 0
