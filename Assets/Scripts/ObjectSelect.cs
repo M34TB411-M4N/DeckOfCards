@@ -49,6 +49,10 @@ public class ObjectSelect : MonoBehaviour {
     private Vector3 dragOffset;
     private float lockedY;
 
+    // Add this field with the rest of the private fields:
+    private bool suppressNextPointerUp = false;
+
+
     private Collider tableCollider;
 
     void Start() {
@@ -80,13 +84,18 @@ public class ObjectSelect : MonoBehaviour {
 
     private void HandlePointer() {
         if (PointerDown()) {
-            if (!IsPointerOverUI()) {
-                HideAllMenus();
-                ClearSelectionHighlight();
+            // If we're in ChoosingDeckForCard, do NOT clear menus or selection on pointer down.
+            // We still want to record press position and what was under the pointer.
+            if (state != InputState.ChoosingDeckForCard) {
+                if (!IsPointerOverUI()) {
+                    HideAllMenus();
+                    ClearSelectionHighlight();
+                }
+                // only set pressed state if we're not in choosing mode
+                state = InputState.PressedObject;
             }
 
             pressScreenPos = PointerPosition();
-            state = InputState.PressedObject;
 
             pressedCandidate = null;
             Ray ray = GetRayOnPointer();
@@ -102,13 +111,25 @@ public class ObjectSelect : MonoBehaviour {
         }
 
         if (PointerUp()) {
-            if (state == InputState.PressedObject) {
+            // If the last action set this flag (UI button just fired), consume this pointer-up here
+            // so it doesn't also act as a world click. This prevents the UI click from immediately
+            // being interpreted as "click the world" and clobbering the choosing state.
+            if (suppressNextPointerUp) {
+                suppressNextPointerUp = false;
+                // Do not call ConfirmClick or EndDrag; keep the current state (likely ChoosingDeckForCard).
+                // Return early so the next pointer-up will be a real world click.
+                return;
+            }
+
+            // Normal behavior: confirm click if pressed, or if we're choosing a deck still allow confirm
+            if (state == InputState.PressedObject || state == InputState.ChoosingDeckForCard) {
                 ConfirmClick();
             }
 
             EndDrag();
             state = InputState.Idle;
         }
+
     }
 
     // --------------------
@@ -252,6 +273,44 @@ public class ObjectSelect : MonoBehaviour {
     // --------------------
 
     private void ConfirmClick() {
+        // --------------------
+        // Special: choosing deck for card
+        // --------------------
+        if (state == InputState.ChoosingDeckForCard) {
+            // Do a fresh raycast at pointer-up position to get the actual object under the pointer now.
+            Ray ray = GetRayOnPointer();
+            if (Physics.Raycast(ray, out RaycastHit hit)) {
+                // try parent as well in case collider is on a child
+                Deck clickedDeck = hit.collider.GetComponentInParent<Deck>() ?? hit.collider.GetComponent<Deck>();
+                if (clickedDeck != null && selectedCardView != null) {
+                    // Add card data to the clicked deck
+                    clickedDeck.AddCard(selectedCardView.GetCardData());
+
+                    // Destroy the visual card and clear selection
+                    Destroy(selectedCardView.gameObject);
+                    selectedCardView = null;
+
+                    // Cleanup and return (do NOT open deck menu)
+                    HideAllMenus();
+                    ClearSelectionHighlight();
+                    ClearLogicalSelection();
+                    state = InputState.Idle;
+                    return;
+                }
+            }
+
+            // If we reach here, it wasn't a deck (or nothing hit). Treat as cancel.
+            Debug.Log("Add-to-deck cancelled: click not on a deck.");
+            HideAllMenus();
+            ClearSelectionHighlight();
+            ClearLogicalSelection();
+            state = InputState.Idle;
+            return;
+        }
+
+        // --------------------
+        // Normal click flow
+        // --------------------
         if (pressedCandidate == null)
             return;
 
@@ -272,6 +331,8 @@ public class ObjectSelect : MonoBehaviour {
         }
     }
 
+
+
     // --------------------
     // Menu callbacks (restored)
     // --------------------
@@ -285,14 +346,21 @@ public class ObjectSelect : MonoBehaviour {
         state = InputState.Idle;
     }
 
+
+
     public void OnCardMenuAddToDeckPressed() {
         if (selectedCardView == null)
             return;
+
+        // Suppress the immediate pointer-up that caused this UI click so it doesn't also
+        // register as a world click. The actual deck selection will come from the next click.
+        suppressNextPointerUp = true;
 
         HideAllMenus();
         cancelDeckAddMenu.Show();
         state = InputState.ChoosingDeckForCard;
     }
+
 
     public void onCancelDeckAddPressed() {
         HideAllMenus();

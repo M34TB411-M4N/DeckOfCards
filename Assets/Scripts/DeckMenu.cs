@@ -38,5 +38,11 @@ public class DeckMenu : MonoBehaviour {
         }
     }
 
+    public void OnFlipPressed() {
+        if (currentDeck != null) {
+            Vector3 currentRot = currentDeck.transform.eulerAngles;
+            currentDeck.gameObject.transform.eulerAngles = new Vector3(currentRot.x, currentRot.y, currentRot.z + 180);
+        }
+    }
     public bool GetActive() { return isActive; }
 }
