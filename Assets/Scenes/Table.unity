@@ -476,6 +476,17 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 92888048}
   m_CullTransparentMesh: 1
+--- !u!114 &120474851 stripped
+MonoBehaviour:
+  m_CorrespondingSourceObject: {fileID: 1877183237076794529, guid: 0700d2bc201e1944eb560114136d00e2, type: 3}
+  m_PrefabInstance: {fileID: 1554808661}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d475b8515fdf5e0439e4e4919c20152f, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: '::'
 --- !u!1 &232137623
 GameObject:
   m_ObjectHideFlags: 0
@@ -2868,6 +2879,63 @@ BoxCollider:
   serializedVersion: 3
   m_Size: {x: 10, y: 0.1, z: 10}
   m_Center: {x: 0, y: -0.05, z: 0}
+--- !u!1001 &1554808661
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 0}
+    m_Modifications:
+    - target: {fileID: 3904819542829632846, guid: 0700d2bc201e1944eb560114136d00e2, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3904819542829632846, guid: 0700d2bc201e1944eb560114136d00e2, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3904819542829632846, guid: 0700d2bc201e1944eb560114136d00e2, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3904819542829632846, guid: 0700d2bc201e1944eb560114136d00e2, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 3904819542829632846, guid: 0700d2bc201e1944eb560114136d00e2, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3904819542829632846, guid: 0700d2bc201e1944eb560114136d00e2, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3904819542829632846, guid: 0700d2bc201e1944eb560114136d00e2, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3904819542829632846, guid: 0700d2bc201e1944eb560114136d00e2, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3904819542829632846, guid: 0700d2bc201e1944eb560114136d00e2, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3904819542829632846, guid: 0700d2bc201e1944eb560114136d00e2, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 6968500905674835898, guid: 0700d2bc201e1944eb560114136d00e2, type: 3}
+      propertyPath: m_Name
+      value: HighlightBox
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents: []
+  m_SourcePrefab: {fileID: 100100000, guid: 0700d2bc201e1944eb560114136d00e2, type: 3}
 --- !u!1 &1609446176
 GameObject:
   m_ObjectHideFlags: 0
@@ -3034,7 +3102,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 4e39285f80e8d8b47b55cb49f3edb6f3, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ObjectSelect
-  selectedMat: {fileID: 2100000, guid: f62f57aa67dcadb4695242eb98a4e85e, type: 2}
   deckMenu: {fileID: 1990817939}
   cardMenu: {fileID: 748629957}
   cancelDeckAddMenu: {fileID: 334613196}
@@ -3042,6 +3109,7 @@ MonoBehaviour:
   maxDragSpeed: 50
   dragResponsiveness: 75
   boundsPushForce: 30
+  highlight: {fileID: 120474851}
   markerKeepTime: 0.15
 --- !u!4 &1782618115
 Transform:
@@ -3500,3 +3568,4 @@ SceneRoots:
   - {fileID: 1782618115}
   - {fileID: 1907776013}
   - {fileID: 795336493}
+  - {fileID: 1554808661}
