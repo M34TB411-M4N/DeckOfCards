@@ -75,7 +75,6 @@ public class HighlightController : MonoBehaviour {
 
         isActive = true;
         gameObject.SetActive(true);
-        Debug.Log("showing");
 
         // Immediately snap to avoid visible pop
         Bounds b = ComputeTargetBounds();
@@ -93,7 +92,6 @@ public class HighlightController : MonoBehaviour {
         target = null;
         targetRenderers = null;
         targetColliders = null;
-        Debug.Log("hide");
     }
 
     /// <summary>
@@ -105,6 +103,5 @@ public class HighlightController : MonoBehaviour {
         target = null;
         targetRenderers = null;
         targetColliders = null;
-        Debug.Log("hideimm");
     }
 }

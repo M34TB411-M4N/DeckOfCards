@@ -27,22 +27,19 @@ public class DeckMenu : MonoBehaviour {
     // Button callback wired in inspector (Draw)
     // The menu delegates the action to the controller (state machine)
     public void OnDrawCardPressed() {
-        if (controller != null) 
-            controller.OnDeckMenuDrawPressed();
-        else {
-            // fallback behavior (not recommended)
-            if (currentDeck != null)
-                currentDeck.DrawCard();
-
-            Hide();
-        }
+        if (currentDeck == null) return;
+        currentDeck.DrawCard();
+        // Tell the controller we completed a UI action -> clear selection & menus
+        if (controller != null) controller.MenuActionCompleted();
     }
 
     public void OnFlipPressed() {
-        if (currentDeck != null) {
-            Vector3 currentRot = currentDeck.transform.eulerAngles;
-            currentDeck.gameObject.transform.eulerAngles = new Vector3(currentRot.x, currentRot.y, currentRot.z + 180);
-        }
+        if (currentDeck == null) return;
+        currentDeck.transform.Rotate(0f, 0f, 180f, Space.Self);
+        if (controller != null) controller.MenuActionCompleted();
     }
+    //public void OnOtherButtonPressed() {
+    //    if (controller != null) controller.MenuActionCompleted();
+    //}
     public bool GetActive() { return isActive; }
 }

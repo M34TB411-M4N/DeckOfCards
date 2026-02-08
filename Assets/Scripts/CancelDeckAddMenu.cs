@@ -22,14 +22,6 @@ public class CancelDeckAddMenu : MonoBehaviour
 
     // Called by the AddToDeck UI button
     public void OnCancelDeckAddPressed() {
-        if (controller != null) 
-            controller.onCancelDeckAddPressed();
-        else {
-            // fallback: do nothing
-            Debug.LogWarning("CancelDeckAddMenu controller missing - cannot leave add-to-deck mode.");
-        }
-
-        // The menu hides; the controller will now be in ChoosingDeckForCard state.
-        Hide();
+        if (controller != null) controller.onCancelDeckAddPressed();
     }
 }

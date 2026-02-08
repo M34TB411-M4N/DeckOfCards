@@ -22,7 +22,7 @@ public class ObjectSelect : MonoBehaviour {
     private Deck selectedDeck;
     private CardView selectedCardView;
 
-    private HoverWhileDragged hoverComponent = null;
+    private HoverWhileDragged hoverComponent;
 
     private enum InputState {
         Idle,
@@ -33,18 +33,23 @@ public class ObjectSelect : MonoBehaviour {
 
     private InputState state = InputState.Idle;
 
-    private Vector2 pressScreenPos;
-    private GameObject pressedCandidate;
+    private Vector2 pointerDownScreenPos;
+    private bool didDrag;
 
+    private GameObject pressedCandidate;
     private Rigidbody draggedRb;
     private DraggedMarker draggedMarker;
 
     [SerializeField] private float markerKeepTime = 0.15f;
-    private Coroutine removeMarkerCoroutine = null;
+    private Coroutine removeMarkerCoroutine;
 
     private Collider tableCollider;
 
-    // prevents UI click pointer-up from also acting as world click
+    // NEW: pending data for Add->ChooseDeck flow
+    private Card pendingCard = null;
+    private GameObject pendingCardGO = null;
+
+    // NEW: suppress the immediate pointer-up world-clear after a UI click that opened a menu
     private bool suppressNextPointerUp = false;
 
     void Start() {
@@ -76,42 +81,63 @@ public class ObjectSelect : MonoBehaviour {
     // =====================
 
     private void HandlePointer() {
+        bool overUI = IsPointerOverUI();
+
         if (PointerDown()) {
-            // Ignore UI clicks for world logic
-            if (IsPointerOverUI())
+            pointerDownScreenPos = PointerPosition();
+            didDrag = false;
+
+            // If pointer started on UI, don't process a world press here
+            if (overUI)
                 return;
 
-            // Only enter pressed state if idle
             if (state == InputState.Idle) {
                 HideAllMenus();
                 ClearSelection();
                 state = InputState.PressedObject;
             }
 
-            pressScreenPos = PointerPosition();
             pressedCandidate = RaycastWorldObject();
         }
 
         if (PointerHeld() && state == InputState.PressedObject) {
-            if (Vector2.Distance(pressScreenPos, PointerPosition()) >= dragThresholdPixels) {
+            if (Vector2.Distance(pointerDownScreenPos, PointerPosition()) >= dragThresholdPixels) {
                 BeginDrag();
+                didDrag = true;
             }
         }
 
         if (PointerUp()) {
-            if (suppressNextPointerUp) {
-                suppressNextPointerUp = false;
+            // If the pointer-up is over UI and we were just opening a UI flow, consume it
+            if (overUI) {
+                if (suppressNextPointerUp) {
+                    suppressNextPointerUp = false;
+                    return; // allow UI to handle the click; do not clear menus here
+                }
+
+                // Normal pointer-up over UI: clear selection/menus and do nothing else
+                ClearSelectionAndMenus();
                 return;
             }
 
-            if (IsPointerOverUI())
+            // If we are in choosing-deck mode, that mode owns this click
+            if (state == InputState.ChoosingDeckForCard) {
+                HandleAddToDeckClick();
                 return;
+            }
 
-            ConfirmClick();
-            EndDrag();
-
-            if (state != InputState.ChoosingDeckForCard)
+            if (state == InputState.Dragging) {
+                EndDrag();
                 state = InputState.Idle;
+                return;
+            }
+
+            if (state == InputState.PressedObject && !didDrag) {
+                ConfirmClick();
+            }
+
+            EndDrag();
+            state = InputState.Idle;
         }
     }
 
@@ -134,6 +160,11 @@ public class ObjectSelect : MonoBehaviour {
         draggedMarker = pressedCandidate.GetComponent<DraggedMarker>();
         if (draggedMarker == null)
             draggedMarker = pressedCandidate.AddComponent<DraggedMarker>();
+
+        if (removeMarkerCoroutine != null) {
+            StopCoroutine(removeMarkerCoroutine);
+            removeMarkerCoroutine = null;
+        }
 
         draggedRb.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
         draggedRb.interpolation = RigidbodyInterpolation.Interpolate;
@@ -188,9 +219,6 @@ public class ObjectSelect : MonoBehaviour {
             draggedRb.angularVelocity = Vector3.zero;
 
         if (draggedMarker != null) {
-            if (removeMarkerCoroutine != null)
-                StopCoroutine(removeMarkerCoroutine);
-
             removeMarkerCoroutine = StartCoroutine(RemoveDraggedMarkerAfterDelay(draggedMarker.gameObject));
             draggedMarker = null;
         }
@@ -210,39 +238,45 @@ public class ObjectSelect : MonoBehaviour {
     // =====================
 
     private void ConfirmClick() {
-        if (state == InputState.ChoosingDeckForCard) {
-            GameObject hitObj = RaycastWorldObject();
-            if (hitObj != null) {
-                Deck deck = hitObj.GetComponentInParent<Deck>();
-                if (deck != null && selectedCardView != null) {
-                    deck.AddCard(selectedCardView.GetCardData());
-                    Destroy(selectedCardView.gameObject);
-                }
-            }
-
-            ClearSelection();
-            HideAllMenus();
-            state = InputState.Idle;
-            return;
-        }
-
         if (pressedCandidate == null)
             return;
 
         SelectObject(pressedCandidate);
     }
 
+    // NEW: dedicated handler for the "choose a deck to add the pending card" click
+    private void HandleAddToDeckClick() {
+        GameObject hitObj = RaycastWorldObject();
+
+        if (hitObj != null) {
+            Deck deck = hitObj.GetComponentInParent<Deck>();
+            if (deck != null && pendingCard != null) {
+                // add the pending card and destroy its visual
+                deck.AddCard(pendingCard);
+                if (pendingCardGO != null)
+                    Destroy(pendingCardGO);
+            }
+        }
+
+        // clear pending and UI
+        pendingCard = null;
+        pendingCardGO = null;
+
+        ClearSelectionAndMenus();
+        state = InputState.Idle;
+    }
+
     private void SelectObject(GameObject obj) {
         ClearSelection();
 
-        highlight.Show(obj);
+        if (highlight != null)
+            highlight.Show(obj);
 
         selectedDeck = obj.GetComponent<Deck>();
         selectedCardView = obj.GetComponent<CardView>();
 
         if (selectedDeck != null)
             deckMenu.Show(selectedDeck, PointerPosition());
-
         else if (selectedCardView != null)
             cardMenu.Show(selectedCardView, PointerPosition());
     }
@@ -251,27 +285,38 @@ public class ObjectSelect : MonoBehaviour {
     // UI CALLBACKS
     // =====================
 
-    public void OnDeckMenuDrawPressed() {
-        if (selectedDeck == null)
-            return;
-
-        selectedDeck.DrawCard();
-        ClearSelectionAndMenus();
-    }
-
     public void OnCardMenuAddToDeckPressed() {
         if (selectedCardView == null)
             return;
 
+        // Capture the card data + visual before we clear selection
+        pendingCard = selectedCardView.GetCardData();
+        pendingCardGO = selectedCardView.gameObject;
+
+        // Clear selection and menus (we're entering a modal "choose deck" flow)
         ClearSelection();
         HideAllMenus();
 
-        suppressNextPointerUp = true;
+        // Show the small cancel/choose UI and enter modal state
         cancelDeckAddMenu.Show();
+
+        // Prevent the immediate pointer-up (that triggered this UI click) from clearing the menu
+        suppressNextPointerUp = true;
+
         state = InputState.ChoosingDeckForCard;
     }
 
     public void onCancelDeckAddPressed() {
+        // cancel the modal flow and drop the pending card
+        pendingCard = null;
+        pendingCardGO = null;
+
+        ClearSelectionAndMenus();
+        state = InputState.Idle;
+    }
+
+    // Called by menus when they finish an action that should reset selection/menus
+    public void MenuActionCompleted() {
         ClearSelectionAndMenus();
         state = InputState.Idle;
     }
@@ -283,7 +328,8 @@ public class ObjectSelect : MonoBehaviour {
     private void ClearSelection() {
         selectedDeck = null;
         selectedCardView = null;
-        highlight.Hide();
+        if (highlight != null)
+            highlight.Hide();
     }
 
     private void ClearSelectionAndMenus() {
