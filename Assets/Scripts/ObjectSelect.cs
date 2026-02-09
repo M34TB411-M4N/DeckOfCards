@@ -280,6 +280,14 @@ public class ObjectSelect : MonoBehaviour {
         else if (selectedCardView != null)
             cardMenu.Show(selectedCardView, PointerPosition());
     }
+    // Inside ObjectSelect.cs
+    public bool IsPointerOverDraggable() {
+        GameObject hit = RaycastWorldObject();
+        if (hit == null) return false;
+
+        // Only block the camera if we hit something with a CardView or Deck script
+        return hit.tag == "MoveableObject";
+    }
 
     // =====================
     // UI CALLBACKS
@@ -343,7 +351,7 @@ public class ObjectSelect : MonoBehaviour {
         if (cancelDeckAddMenu != null) cancelDeckAddMenu.Hide();
     }
 
-    private GameObject RaycastWorldObject() {
+    public GameObject RaycastWorldObject() {
         Ray ray = Camera.main.ScreenPointToRay(PointerPosition());
         if (Physics.Raycast(ray, out RaycastHit hit))
             return hit.collider.gameObject;
