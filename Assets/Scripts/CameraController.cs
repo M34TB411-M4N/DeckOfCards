@@ -28,7 +28,14 @@ public class CameraController : MonoBehaviour {
 
     void Update() {
         if (movementJoystick != null) {
-            SetMoveInput(movementJoystick.Direction);
+            Vector2 joystickDir = movementJoystick.Direction;
+
+            // Only apply input if the joystick is moved more than 5%
+            if (joystickDir.magnitude > 0.05f) {
+                SetMoveInput(joystickDir);
+            } else {
+                SetMoveInput(Vector2.zero);
+            }
         }
 
         HandleLook();
@@ -101,13 +108,23 @@ public class CameraController : MonoBehaviour {
         transform.localRotation = Quaternion.Euler(pitch, yaw, 0f);
     }
     private void ApplyMovement() {
+        // If there's no movement or elevation input, stop early
         if (moveInput == Vector3.zero && elevationInput == 0) return;
 
+        // 1. Get the horizontal direction relative to camera
         Vector3 direction = (transform.forward * moveInput.z) + (transform.right * moveInput.x);
-        direction.y = 0;
+        direction.y = 0; // Keep movement on the horizontal plane
 
-        Vector3 elevation = Vector3.up * elevationInput;
-        transform.position += (direction.normalized * moveSpeed + elevation * elevationSpeed) * Time.deltaTime;
+        // 2. IMPORTANT: Do NOT normalize the direction here if you want variable speed.
+        // The moveInput already has a magnitude between 0 and 1 from the joystick.
+        float currentHorizontalSpeed = direction.magnitude * moveSpeed;
+
+        // 3. Handle Elevation (this remains constant speed for precision)
+        Vector3 elevation = Vector3.up * elevationInput * elevationSpeed;
+
+        // 4. Apply the translation
+        // We normalize the direction just to get the vector, then multiply by our calculated speed
+        transform.position += (direction.normalized * currentHorizontalSpeed + elevation) * Time.deltaTime;
     }
 
     // Add these to CameraController.cs
