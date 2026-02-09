@@ -11,6 +11,10 @@ public class PauseMenu : MonoBehaviour {
     [SerializeField] private ObjectSelect objectSelect;
 
     private bool isPaused = false;
+    [Header("Spawning")]
+    [SerializeField] private GameObject deckPrefab;
+    [SerializeField] private float defaultSpawnDistance = 10f;
+    [SerializeField] private float spawnHeightOffset = 2f; // Spawn slightly above table so it drops in
 
     void Start() {
         // Ensure the menu is hidden on start
@@ -48,9 +52,16 @@ public class PauseMenu : MonoBehaviour {
     // --- Button Actions ---
 
     public void OnAddDeckPressed() {
-        // We can implement the logic to spawn a new Deck prefab here later
-        Debug.Log("Add Deck logic goes here.");
-        // ResumeGame(); // Optional: close menu after adding?
+        Vector3 spawnPosition = CalculateSpawnPosition();
+
+        // Instantiate the deck
+        GameObject newDeck = Instantiate(deckPrefab, spawnPosition, Quaternion.identity);
+
+        // Optional: If you want it to land flat, reset rotation
+        newDeck.transform.rotation = Quaternion.Euler(0, Camera.main.transform.eulerAngles.y, 0);
+
+        Debug.Log($"Deck spawned at {spawnPosition}");
+        ResumeGame(); // Close menu after adding
     }
 
     public void OnViewRulesPressed() {
@@ -68,5 +79,32 @@ public class PauseMenu : MonoBehaviour {
     public void OnLeaveGamePressed() {
         Time.timeScale = 1f; // Always reset time before changing scenes!
         SceneManager.LoadScene("MainMenu");
+    }
+
+    private Vector3 CalculateSpawnPosition() {
+        Camera cam = Camera.main;
+        // 1. Define the ray from the center of the screen
+        Ray ray = cam.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0));
+
+        // 2. Define a mathematical plane at the table's Y level (assuming Y=0 or floor height)
+        // Find the floor Y from your existing logic or a serialized field
+        float tableY = 0f;
+        GameObject floor = GameObject.FindGameObjectWithTag("Floor");
+        if (floor != null) tableY = floor.transform.position.y;
+
+        Plane tablePlane = new Plane(Vector3.up, new Vector3(0, tableY, 0));
+
+        // 3. Try to intersect the ray with the plane
+        if (tablePlane.Raycast(ray, out float enter)) {
+            // Limit how far away they can spawn a deck so it's not miles away
+            if (enter <= defaultSpawnDistance * 2f) {
+                return ray.GetPoint(enter) + Vector3.up * spawnHeightOffset;
+            }
+        }
+
+        // 4. Fallback: If looking at sky or too far, spawn in front of camera
+        Vector3 fallbackPos = cam.transform.position + cam.transform.forward * defaultSpawnDistance;
+        fallbackPos.y = tableY + spawnHeightOffset; // Keep it at a reasonable height
+        return fallbackPos;
     }
 }
