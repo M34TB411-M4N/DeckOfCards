@@ -86,14 +86,17 @@ public class ObjectSelect : MonoBehaviour {
             pointerDownScreenPos = PointerPosition();
             didDrag = false;
 
-            if (overUI) return;
+            if (overUI) return; // Ignore world processing if clicking UI
 
             if (state == InputState.Idle) {
-                HideAllMenus();
-                ClearSelection();
+                // Only hide menus if we click the actual empty table
+                GameObject hit = RaycastWorldObject();
+                if (hit == null || !hit.CompareTag("MoveableObject")) {
+                    HideAllMenus();
+                    ClearSelection();
+                }
                 state = InputState.PressedObject;
             }
-
             pressedCandidate = RaycastWorldObject();
         }
 
@@ -105,12 +108,10 @@ public class ObjectSelect : MonoBehaviour {
         }
 
         if (PointerUp()) {
+            // FIX: If we released over UI, do NOT clear menus.
+            // This allows the Input Field to stay active.
             if (overUI) {
-                if (suppressNextPointerUp) {
-                    suppressNextPointerUp = false;
-                    return;
-                }
-                ClearSelectionAndMenus();
+                suppressNextPointerUp = false;
                 return;
             }
 

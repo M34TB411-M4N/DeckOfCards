@@ -23,13 +23,17 @@ public class PlayerHand : MonoBehaviour {
         if (!cardsInHand.Contains(card)) {
             cardsInHand.Add(card);
 
-            // Disable physics 
             if (card.TryGetComponent<Rigidbody>(out var rb)) {
                 rb.isKinematic = true;
-                // Optional: clear velocity so it doesn't drift
-                rb.linearVelocity = Vector3.zero;
-                rb.angularVelocity = Vector3.zero;
             }
+
+            // FIX: Disable collider so it doesn't bump into things while moving/sitting in hand
+            if (card.TryGetComponent<Collider>(out var coll)) {
+                coll.enabled = false;
+            }
+        }
+        if (card.TryGetComponent<Collider>(out var col)) {
+            col.isTrigger = true; // No physics bounces, but still clickable!
         }
     }
 
@@ -37,10 +41,17 @@ public class PlayerHand : MonoBehaviour {
         if (cardsInHand.Contains(card)) {
             cardsInHand.Remove(card);
 
-            // Re-enable physics
             if (card.TryGetComponent<Rigidbody>(out var rb)) {
                 rb.isKinematic = false;
             }
+
+            // FIX: Re-enable collider so you can pick it up again on the table
+            if (card.TryGetComponent<Collider>(out var coll)) {
+                coll.enabled = true;
+            }
+        }
+        if (card.TryGetComponent<Collider>(out var col)) {
+            col.isTrigger = false; // Solid again for the table
         }
     }
 
@@ -86,10 +97,25 @@ public class PlayerHand : MonoBehaviour {
             Quaternion standRot = Quaternion.Euler(standingRotation);
             Quaternion finalRot = seatRot * standRot;
 
-            // Apply Smooth Movement
             Transform cardTransform = cardsInHand[i].transform;
-            cardTransform.position = Vector3.Lerp(cardTransform.position, targetPos, Time.deltaTime * transitionSpeed);
-            cardTransform.rotation = Quaternion.Slerp(cardTransform.rotation, finalRot, Time.deltaTime * transitionSpeed);
+
+            // FIX: Snapping Logic
+            // If the card is very close to its destination, just snap it there to avoid the "slow crawl"
+            if (Vector3.Distance(cardTransform.position, targetPos) < 0.01f) {
+                cardTransform.position = targetPos;
+            } else {
+                cardTransform.position = Vector3.Lerp(cardTransform.position, targetPos, Time.deltaTime * transitionSpeed);
+            }
+
+            if (Quaternion.Angle(cardTransform.rotation, finalRot) < 0.1f) {
+                cardTransform.rotation = finalRot;
+            } else {
+                cardTransform.rotation = Quaternion.Slerp(cardTransform.rotation, finalRot, Time.deltaTime * transitionSpeed);
+            }
+            // Apply Smooth Movement
+            //Transform cardTransform = cardsInHand[i].transform;
+            //cardTransform.position = Vector3.Lerp(cardTransform.position, targetPos, Time.deltaTime * transitionSpeed);
+            //cardTransform.rotation = Quaternion.Slerp(cardTransform.rotation, finalRot, Time.deltaTime * transitionSpeed);
         }
     }
 }
