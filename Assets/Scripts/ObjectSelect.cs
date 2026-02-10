@@ -141,8 +141,11 @@ public class ObjectSelect : MonoBehaviour {
     private void BeginDrag() {
         if (pressedCandidate == null) return;
 
-        // NEW: If the object is a card, check if it's currently in a hand and remove it
         CardView card = pressedCandidate.GetComponent<CardView>();
+        Quaternion resetRot = pressedCandidate.transform.rotation;
+        resetRot.x = 0f;
+        resetRot.z = 0f;
+        pressedCandidate.transform.rotation = resetRot;
         if (card != null) {
             // Find all hand scripts in the scene and see if any contain this card
             PlayerHand[] allHands = FindObjectsByType<PlayerHand>(FindObjectsSortMode.None);
@@ -355,8 +358,15 @@ public class ObjectSelect : MonoBehaviour {
 
     public GameObject RaycastWorldObject() {
         Ray ray = Camera.main.ScreenPointToRay(PointerPosition());
-        if (Physics.Raycast(ray, out RaycastHit hit))
+
+        // Change this line:
+        // We use 'Mathf.Infinity' for distance (default), 
+        // 'Physics.DefaultRaycastLayers' to hit normal objects, 
+        // and 'QueryTriggerInteraction.Ignore' to skip the Seat Triggers.
+        if (Physics.Raycast(ray, out RaycastHit hit, Mathf.Infinity, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore)) {
             return hit.collider.gameObject;
+        }
+
         return null;
     }
 

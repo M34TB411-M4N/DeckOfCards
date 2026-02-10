@@ -1,3 +1,4 @@
+using TMPro;
 using UnityEngine;
 
 public class DeckMenu : MonoBehaviour {
@@ -5,6 +6,8 @@ public class DeckMenu : MonoBehaviour {
 
     private Deck currentDeck;
     private bool isActive;
+
+    [SerializeField] private TMP_InputField dealCountInput;
 
     void Awake() {
         Hide();
@@ -16,6 +19,8 @@ public class DeckMenu : MonoBehaviour {
         currentDeck = deck;
         gameObject.SetActive(true);
         gameObject.transform.position = screenPosition;
+
+        if (dealCountInput != null) dealCountInput.text = "7";
     }
 
     public void Hide() {
@@ -35,8 +40,23 @@ public class DeckMenu : MonoBehaviour {
 
     public void OnFlipPressed() {
         if (currentDeck == null) return;
-        currentDeck.transform.Rotate(0f, 0f, 180f, Space.Self);
+        currentDeck.Flip();
         if (controller != null) controller.MenuActionCompleted();
+    }
+
+    public void OnDealButtonPressed() {
+        if (currentDeck == null) return;
+
+        int count = 7; // Default
+        if (dealCountInput != null && int.TryParse(dealCountInput.text, out int result)) {
+            count = result;
+        }
+
+        // Make the simple call to the deck
+        currentDeck.StartDealing(count);
+
+        // Notify the controller to close menus, following your pattern
+        controller.MenuActionCompleted();
     }
     //public void OnOtherButtonPressed() {
     //    if (controller != null) controller.MenuActionCompleted();
