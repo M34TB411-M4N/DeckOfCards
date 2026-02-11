@@ -23,4 +23,8 @@ public class CardView : MonoBehaviour {
     public void OnClicked() {
         // Card-specific behavior
     }
+
+    public void Flip() {
+        transform.Rotate(0f, 0f, 180f, Space.Self);
+    }
 }

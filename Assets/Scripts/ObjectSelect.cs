@@ -86,55 +86,50 @@ public class ObjectSelect : MonoBehaviour {
             pointerDownScreenPos = PointerPosition();
             didDrag = false;
 
-            if (overUI) return; // Ignore world processing if clicking UI
+            // If clicking UI, stop here so we don't close menus
+            if (overUI) return;
 
-            if (state == InputState.Idle) {
-                // Only hide menus if we click the actual empty table
-                GameObject hit = RaycastWorldObject();
-                if (hit == null || !hit.CompareTag("MoveableObject")) {
-                    HideAllMenus();
-                    ClearSelection();
-                }
+            GameObject hit = RaycastWorldObject();
+
+            if (hit == null) {
+                // Only hide menus if we actually click the empty table
+                HideAllMenus();
+                ClearSelection();
+                pressedCandidate = null;
+                state = InputState.Idle;
+            } else {
+                pressedCandidate = hit;
                 state = InputState.PressedObject;
             }
-            pressedCandidate = RaycastWorldObject();
         }
 
-        if (PointerHeld() && state == InputState.PressedObject) {
-            if (Vector2.Distance(pointerDownScreenPos, PointerPosition()) >= dragThresholdPixels) {
-                BeginDrag();
-                didDrag = true;
+        if (PointerHeld()) {
+            if (state == InputState.PressedObject && !didDrag) {
+                // FIXED: Using the correct variable name 'dragThresholdPixels'
+                if (Vector2.Distance(pointerDownScreenPos, PointerPosition()) > dragThresholdPixels) {
+                    didDrag = true;
+                    BeginDrag();
+                }
+            }
+
+            if (state == InputState.Dragging) {
+                ApplyDragVelocity(); // Call this in Update or FixedUpdate; here for logic flow
             }
         }
 
         if (PointerUp()) {
-            // FIX: If we released over UI, do NOT clear menus.
-            // This allows the Input Field to stay active.
-            if (overUI) {
-                suppressNextPointerUp = false;
-                return;
-            }
-
-            if (state == InputState.ChoosingDeckForCard) {
-                HandleAddToDeckClick();
-                return;
-            }
+            if (overUI) return;
 
             if (state == InputState.Dragging) {
                 EndDrag();
                 state = InputState.Idle;
-                return;
-            }
-
-            if (state == InputState.PressedObject && !didDrag) {
+            } else if (state == InputState.PressedObject && !didDrag) {
+                // This ensures the click is processed and menu shown
                 ConfirmClick();
+                state = InputState.Idle;
             }
-
-            EndDrag();
-            state = InputState.Idle;
         }
     }
-
     // =====================
     // DRAGGING
     // =====================
@@ -262,6 +257,15 @@ public class ObjectSelect : MonoBehaviour {
 
     private void ConfirmClick() {
         if (pressedCandidate == null) return;
+
+        // 1. Always hide any existing menu first to prevent overlaps
+        HideAllMenus();
+
+        // 2. Clear old selection data
+        ClearSelection();
+
+        // 3. Set the new selection and show its specific menu
+        // This function should handle setting selectedCardView/selectedDeck and opening the UI
         SelectObject(pressedCandidate);
     }
 
@@ -283,8 +287,7 @@ public class ObjectSelect : MonoBehaviour {
     }
 
     private void SelectObject(GameObject obj) {
-        // Filter: Don't select the floor or anything not tagged "MoveableObject"
-        if (obj.tag != "MoveableObject") {
+        if (obj == null || !obj.CompareTag("MoveableObject")) {
             ClearSelectionAndMenus();
             return;
         }
@@ -292,13 +295,16 @@ public class ObjectSelect : MonoBehaviour {
         ClearSelection();
         if (highlight != null) highlight.Show(obj);
 
-        selectedDeck = obj.GetComponent<Deck>();
-        selectedCardView = obj.GetComponent<CardView>();
+        // FIXED: Use GetComponentInParent to ensure we find the script 
+        // even if the collider is on a child object
+        selectedDeck = obj.GetComponentInParent<Deck>();
+        selectedCardView = obj.GetComponentInParent<CardView>();
 
-        if (selectedDeck != null)
+        if (selectedDeck != null) {
             deckMenu.Show(selectedDeck, PointerPosition());
-        else if (selectedCardView != null)
+        } else if (selectedCardView != null) {
             cardMenu.Show(selectedCardView, PointerPosition());
+        }
     }
 
     public bool IsPointerOverDraggable() {
@@ -322,6 +328,30 @@ public class ObjectSelect : MonoBehaviour {
         cancelDeckAddMenu.Show();
         suppressNextPointerUp = true;
         state = InputState.ChoosingDeckForCard;
+    }
+
+    public void OnCardMenuAddToHandPressed() {
+        if (selectedCardView == null || GameManager.Instance == null) return;
+
+        PlayerHand myHand = GameManager.Instance.MyHand;
+
+        if (myHand == null) {
+            Debug.LogError("PlayerHand not found! Check your GameManager seat assignments.");
+            return;
+        }
+
+        PlayerHand[] allHands = FindObjectsByType<PlayerHand>(FindObjectsSortMode.None);
+        foreach (var hand in allHands) {
+            if (hand.cardsInHand.Contains(selectedCardView)) {
+                hand.RemoveCard(selectedCardView);
+                break;
+            }
+        }
+
+        myHand.AddCard(selectedCardView);
+
+        ClearSelectionAndMenus();
+        state = InputState.Idle;
     }
 
     public void onCancelDeckAddPressed() {
@@ -360,14 +390,17 @@ public class ObjectSelect : MonoBehaviour {
     public GameObject RaycastWorldObject() {
         Ray ray = Camera.main.ScreenPointToRay(PointerPosition());
 
-        // Change this line:
-        // We use 'Mathf.Infinity' for distance (default), 
-        // 'Physics.DefaultRaycastLayers' to hit normal objects, 
-        // and 'QueryTriggerInteraction.Ignore' to skip the Seat Triggers.
-        if (Physics.Raycast(ray, out RaycastHit hit, Mathf.Infinity, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore)) {
-            return hit.collider.gameObject;
-        }
+        // Hit everything, including Triggers (cards in hand)
+        RaycastHit[] hits = Physics.RaycastAll(ray, Mathf.Infinity, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Collide);
 
+        System.Array.Sort(hits, (x, y) => x.distance.CompareTo(y.distance));
+
+        foreach (RaycastHit hit in hits) {
+            // Return the first object tagged MoveableObject
+            if (hit.collider.gameObject.CompareTag("MoveableObject")) {
+                return hit.collider.gameObject;
+            }
+        }
         return null;
     }
 
@@ -410,6 +443,16 @@ public class ObjectSelect : MonoBehaviour {
     }
 
     private bool IsPointerOverUI() {
-        return EventSystem.current != null && EventSystem.current.IsPointerOverGameObject();
+        if (EventSystem.current == null) return false;
+
+#if UNITY_ANDROID && !UNITY_EDITOR
+    // On Android, we must check the specific touch ID
+    if (Input.touchCount > 0) {
+        return EventSystem.current.IsPointerOverGameObject(Input.GetTouch(0).fingerId);
+    }
+    return false;
+#else
+        return EventSystem.current.IsPointerOverGameObject();
+#endif
     }
 }

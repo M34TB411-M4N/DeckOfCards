@@ -33,6 +33,16 @@ public class CardMenu : MonoBehaviour {
     //    // do inspect work...
     //    if (controller != null) controller.MenuActionCompleted();
     //}
+    public void OnAddToHandButtonPressed() {
+        if (controller != null) {
+            controller.OnCardMenuAddToHandPressed();
+        }
+    }
+
+    public void OnFlipButtonPressed() {
+        if (controller != null) selectedCard.Flip();
+        controller.MenuActionCompleted();
+    }
 
     public CardView GetSelectedCard() { return selectedCard; }
 }

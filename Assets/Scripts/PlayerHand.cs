@@ -20,24 +20,30 @@ public class PlayerHand : MonoBehaviour {
     }
 
     public void AddCard(CardView card) {
+        if (card == null) return;
+
         if (!cardsInHand.Contains(card)) {
             cardsInHand.Add(card);
 
+            // Use Unity 6 linearVelocity naming
             if (card.TryGetComponent<Rigidbody>(out var rb)) {
                 rb.isKinematic = true;
+                rb.linearVelocity = Vector3.zero;
+                rb.angularVelocity = Vector3.zero;
             }
 
-            // FIX: Disable collider so it doesn't bump into things while moving/sitting in hand
-            if (card.TryGetComponent<Collider>(out var coll)) {
-                coll.enabled = false;
+            // FIXED: Keep collider enabled so Raycast can hit it, 
+            // but set to Trigger to stop physics collisions.
+            if (card.TryGetComponent<Collider>(out var col)) {
+                col.enabled = true;
+                col.isTrigger = true;
             }
-        }
-        if (card.TryGetComponent<Collider>(out var col)) {
-            col.isTrigger = true; // No physics bounces, but still clickable!
         }
     }
 
     public void RemoveCard(CardView card) {
+        if (card == null) return;
+
         if (cardsInHand.Contains(card)) {
             cardsInHand.Remove(card);
 
@@ -45,13 +51,11 @@ public class PlayerHand : MonoBehaviour {
                 rb.isKinematic = false;
             }
 
-            // FIX: Re-enable collider so you can pick it up again on the table
-            if (card.TryGetComponent<Collider>(out var coll)) {
-                coll.enabled = true;
+            // Return to solid state for table physics
+            if (card.TryGetComponent<Collider>(out var col)) {
+                col.enabled = true;
+                col.isTrigger = false;
             }
-        }
-        if (card.TryGetComponent<Collider>(out var col)) {
-            col.isTrigger = false; // Solid again for the table
         }
     }
 
