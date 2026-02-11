@@ -12,6 +12,7 @@ public class DeckMenu : MonoBehaviour {
     void Awake() {
         Hide();
     }
+    public bool GetActive() { return isActive; }
 
     // Show a menu for a particular deck (keeps a reference for display, but actions go to controller)
     public void Show(Deck deck, Vector3 screenPosition) {
@@ -58,8 +59,27 @@ public class DeckMenu : MonoBehaviour {
         // Notify the controller to close menus, following your pattern
         controller.MenuActionCompleted();
     }
+
+    public void OnRemoveTopCardButtonPressed() {
+        if (currentDeck == null) return;
+
+        // Call the logic on the deck itself
+        currentDeck.RemoveTopCard();
+
+        // Close the menu and clear selection using your existing controller callback
+        if (controller != null) {
+            controller.MenuActionCompleted();
+        }
+    }
+
+    public void OnShufflePressed() {
+        if (currentDeck == null) return;
+
+        currentDeck.Shuffle();
+
+        if (controller != null) controller.MenuActionCompleted();
+    }
     //public void OnOtherButtonPressed() {
     //    if (controller != null) controller.MenuActionCompleted();
     //}
-    public bool GetActive() { return isActive; }
 }

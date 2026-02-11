@@ -40,9 +40,12 @@ public class CardMenu : MonoBehaviour {
     }
 
     public void OnFlipButtonPressed() {
-        if (controller != null) selectedCard.Flip();
-        controller.MenuActionCompleted();
+        if (selectedCard != null) selectedCard.Flip();
+        if (controller != null) controller.MenuActionCompleted();
     }
-
+    public void OnCreatePileButtonPressed() {
+        if (selectedCard != null) selectedCard.ConvertToPile();
+        if (controller != null) controller.MenuActionCompleted();
+    }
     public CardView GetSelectedCard() { return selectedCard; }
 }
