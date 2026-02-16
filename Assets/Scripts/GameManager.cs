@@ -1,8 +1,23 @@
 using UnityEngine;
 using System.Collections.Generic;
 
+[System.Serializable]
+public class PlayerScoreData {
+    public string playerName;
+    public int score;
+}
+
 public class GameManager : MonoBehaviour {
     public static GameManager Instance;
+
+    public List<PlayerScoreData> playerScores = new List<PlayerScoreData>();
+
+    // Call this whenever someone earns points
+    public void AddScore(int playerIndex, int amount) {
+        if (playerIndex >= 0 && playerIndex < playerScores.Count) {
+            playerScores[playerIndex].score += amount;
+        }
+    }
 
     [Header("Table Setup")]
     // Drag your 8 Seat GameObjects here in order (Seat 1 to Seat 8)
@@ -16,6 +31,7 @@ public class GameManager : MonoBehaviour {
     public PlayerHand MyHand {
         get {
             if (myPlayerIndex >= 0 && myPlayerIndex < allSeats.Count) {
+                Debug.Log("got hand");
                 return allSeats[myPlayerIndex];
             }
             return null;
@@ -29,6 +45,10 @@ public class GameManager : MonoBehaviour {
     }
 
     void Start() {
+        //Temp data for testing
+        playerScores.Add(new PlayerScoreData { playerName = "Local Player", score = 0 });
+        playerScores.Add(new PlayerScoreData { playerName = "Opponent 1", score = 150 });
+        //end temp data
         AssignSeats();
     }
 

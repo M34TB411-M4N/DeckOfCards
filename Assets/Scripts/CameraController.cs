@@ -1,11 +1,16 @@
+using System.Collections;
 using UnityEngine;
-using UnityEngine.EventSystems; // Fixed CS0103
+using UnityEngine.EventSystems;
 
 public class CameraController : MonoBehaviour {
+    // SINGLETON PATTERN
+    public static CameraController Instance { get; private set; }
+
     [Header("Movement Settings")]
     [SerializeField] private float moveSpeed = 5f;
     [SerializeField] private float lookSensitivity = 0.15f;
     [SerializeField] private float elevationSpeed = 3f;
+    [SerializeField] private float focusDuration = 0.5f;
 
     [Header("Input References")]
     [SerializeField] private ObjectSelect objectSelect;
@@ -13,12 +18,20 @@ public class CameraController : MonoBehaviour {
 
     private Vector3 moveInput;
     private float elevationInput;
-
     private float pitch = 0f;
     private float yaw = 0f;
-
     private bool isRotating = false;
     private int activeFingerId = -1;
+    private Coroutine focusCoroutine;
+
+    private void Awake() {
+        // Ensure there is only one CameraController
+        if (Instance != null && Instance != this) {
+            Destroy(gameObject);
+            return;
+        }
+        Instance = this;
+    }
 
     void Start() {
         Vector3 rot = transform.localRotation.eulerAngles;
@@ -93,11 +106,9 @@ public class CameraController : MonoBehaviour {
         }
     }
 
-    // Inside CameraController.cs
     private bool IsOverObject() {
         if (objectSelect == null) return false;
 
-        // Now the camera only stops if we are clicking a CARD or DECK
         return objectSelect.IsPointerOverDraggable();
     }
 
@@ -108,27 +119,52 @@ public class CameraController : MonoBehaviour {
         transform.localRotation = Quaternion.Euler(pitch, yaw, 0f);
     }
     private void ApplyMovement() {
-        // If there's no movement or elevation input, stop early
         if (moveInput == Vector3.zero && elevationInput == 0) return;
 
-        // 1. Get the horizontal direction relative to camera
         Vector3 direction = (transform.forward * moveInput.z) + (transform.right * moveInput.x);
         direction.y = 0; // Keep movement on the horizontal plane
 
-        // 2. IMPORTANT: Do NOT normalize the direction here if you want variable speed.
-        // The moveInput already has a magnitude between 0 and 1 from the joystick.
         float currentHorizontalSpeed = direction.magnitude * moveSpeed;
 
-        // 3. Handle Elevation (this remains constant speed for precision)
         Vector3 elevation = Vector3.up * elevationInput * elevationSpeed;
 
-        // 4. Apply the translation
-        // We normalize the direction just to get the vector, then multiply by our calculated speed
         transform.position += (direction.normalized * currentHorizontalSpeed + elevation) * Time.deltaTime;
     }
 
-    // Add these to CameraController.cs
     public void OnUpButtonDown() => elevationInput = 1f;
     public void OnDownButtonDown() => elevationInput = -1f;
     public void OnElevationButtonUp() => elevationInput = 0f;
+
+    public void FocusOnTransform(Transform targetAnchor) {
+        if (targetAnchor == null) return;
+        if (focusCoroutine != null) StopCoroutine(focusCoroutine);
+        focusCoroutine = StartCoroutine(MoveToAnchor(targetAnchor));
+    }
+
+    private IEnumerator MoveToAnchor(Transform anchor) {
+        Vector3 startPos = transform.position;
+        Quaternion startRot = transform.rotation;
+        float elapsed = 0f;
+
+        while (elapsed < focusDuration) {
+            elapsed += Time.deltaTime;
+            float t = elapsed / focusDuration;
+            t = t * t * (3f - 2f * t); // Smoothstep
+
+            transform.position = Vector3.Lerp(startPos, anchor.position, t);
+            transform.rotation = Quaternion.Slerp(startRot, anchor.rotation, t);
+            yield return null;
+        }
+
+        transform.position = anchor.position;
+        transform.rotation = anchor.rotation;
+
+        // Sync variables so joystick movement doesn't snap
+        Vector3 finalEuler = transform.localRotation.eulerAngles;
+        pitch = finalEuler.x;
+        if (pitch > 180) pitch -= 360;
+        yaw = finalEuler.y;
+
+        focusCoroutine = null;
+    }
 }

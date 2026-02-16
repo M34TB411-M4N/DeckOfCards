@@ -1,6 +1,7 @@
+using System.Collections;
+using TMPro.Examples;
 using UnityEngine;
 using UnityEngine.EventSystems;
-using System.Collections;
 
 public class ObjectSelect : MonoBehaviour {
     [Header("Menus")]
@@ -22,6 +23,8 @@ public class ObjectSelect : MonoBehaviour {
 
     [Header("Highlight")]
     [SerializeField] private HighlightController highlight;
+
+    //[SerializeField] private CameraController cameraController;
 
     private Deck selectedDeck;
     private CardView selectedCardView;
@@ -364,6 +367,23 @@ public class ObjectSelect : MonoBehaviour {
     public void MenuActionCompleted() {
         ClearSelectionAndMenus();
         state = InputState.Idle;
+    }
+
+    public void OnFocusOnHandButtonPressed() {
+        if (GameManager.Instance == null || GameManager.Instance.MyHand == null) {
+            Debug.LogWarning("Local player hand not found!");
+            return;
+        }
+
+        Transform anchor = GameManager.Instance.MyHand.cameraAnchor;
+
+        if (anchor != null) {
+            Debug.Log("anchor valid");
+            if (CameraController.Instance != null) {
+                Debug.Log("found it all");
+                CameraController.Instance.FocusOnTransform(anchor);
+            }
+        }
     }
 
     // =====================
