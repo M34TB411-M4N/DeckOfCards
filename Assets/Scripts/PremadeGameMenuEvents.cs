@@ -32,6 +32,7 @@ public class PremadeGameMenuEvents : MonoBehaviour {
     }
 
     private void OnGoFishClicked(ClickEvent e) {
+        SceneManager.LoadScene("GoFishSettings");
         Debug.Log("go fish clicked");
     }
 

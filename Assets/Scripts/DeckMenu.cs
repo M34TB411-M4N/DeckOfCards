@@ -34,11 +34,17 @@ public class DeckMenu : MonoBehaviour {
     // The menu delegates the action to the controller (state machine)
     public void OnDrawCardPressed() {
         if (currentDeck == null) return;
-        currentDeck.DrawCard();
+
+        // We pass the local player's hand as the target for the draw
+        if (GameManager.Instance != null && GameManager.Instance.MyHand != null) {
+            currentDeck.DrawCard(GameManager.Instance.MyHand);
+        } else {
+            Debug.LogError("DeckMenu: Cannot draw because MyHand is null!");
+        }
+
         // Tell the controller we completed a UI action -> clear selection & menus
         if (controller != null) controller.MenuActionCompleted();
     }
-
     public void OnFlipPressed() {
         if (currentDeck == null) return;
         currentDeck.Flip();
