@@ -32,6 +32,7 @@ public class MainMenuEvents : MonoBehaviour
     }
 
     private void OnJoinLobbyClicked(ClickEvent e) {
+        SceneManager.LoadScene("JoinLobby");
         Debug.Log("joinlobby clicked");
     }
 }

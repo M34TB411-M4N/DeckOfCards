@@ -1,6 +1,7 @@
 using UnityEngine;
 using UnityEngine.UIElements;
 using UnityEngine.SceneManagement;
+using Unity.Netcode;
 
 public class PremadeGameMenuEvents : MonoBehaviour {
     private UIDocument document;
@@ -32,8 +33,11 @@ public class PremadeGameMenuEvents : MonoBehaviour {
     }
 
     private void OnGoFishClicked(ClickEvent e) {
-        SceneManager.LoadScene("GoFishSettings");
-        Debug.Log("go fish clicked");
+        NetworkManager.Singleton.StartHost();
+        NetworkManager.Singleton.SceneManager.LoadScene("GoFishSettings", UnityEngine.SceneManagement.LoadSceneMode.Single);
+
+        //SceneManager.LoadScene("GoFishSettings");
+        //Debug.Log("go fish clicked");
     }
 
     private void OnBackClicked(ClickEvent e) {
