@@ -25,7 +25,6 @@ public class CameraController : MonoBehaviour {
     private Coroutine focusCoroutine;
 
     private void Awake() {
-        // Ensure there is only one CameraController
         if (Instance != null && Instance != this) {
             Destroy(gameObject);
             return;
@@ -37,13 +36,16 @@ public class CameraController : MonoBehaviour {
         Vector3 rot = transform.localRotation.eulerAngles;
         yaw = rot.y;
         pitch = rot.x;
+
+        if (objectSelect == null) {
+            objectSelect = FindFirstObjectByType<ObjectSelect>();
+            if (objectSelect == null) Debug.LogError("[CameraController] ObjectSelect reference is MISSING!");
+        }
     }
 
     void Update() {
         if (movementJoystick != null) {
             Vector2 joystickDir = movementJoystick.Direction;
-
-            // Only apply input if the joystick is moved more than 5%
             if (joystickDir.magnitude > 0.05f) {
                 SetMoveInput(joystickDir);
             } else {
@@ -54,6 +56,7 @@ public class CameraController : MonoBehaviour {
         HandleLook();
         ApplyMovement();
     }
+
     public void SetMoveInput(Vector2 input) {
         moveInput = new Vector3(input.x, 0, input.y);
     }
@@ -63,12 +66,17 @@ public class CameraController : MonoBehaviour {
     }
 
     private void HandleLook() {
+        if (objectSelect == null) return;
+
         // --- EDITOR TESTING (Mouse) ---
         if (Application.isEditor && !Input.touchSupported) {
             if (Input.GetMouseButtonDown(0)) {
-                // Only start rotating if we didn't click UI or an Object
-                if (!EventSystem.current.IsPointerOverGameObject() && !IsOverObject()) {
+                // Use our new custom logic instead of EventSystem.IsPointerOverGameObject
+                if (objectSelect.CanCameraRotate()) {
+                    Debug.Log("<color=olive>[Camera]</color> Rotation Started (Mouse)");
                     isRotating = true;
+                } else {
+                    Debug.Log("<color=olive>[Camera]</color> Rotation Blocked (Mouse) - Pointer over UI or Object");
                 }
             }
 
@@ -76,7 +84,10 @@ public class CameraController : MonoBehaviour {
                 ApplyRotation(Input.GetAxis("Mouse X") * 10f, Input.GetAxis("Mouse Y") * 10f);
             }
 
-            if (Input.GetMouseButtonUp(0)) isRotating = false;
+            if (Input.GetMouseButtonUp(0)) {
+                if (isRotating) Debug.Log("<color=olive>[Camera]</color> Rotation Ended (Mouse)");
+                isRotating = false;
+            }
             return;
         }
 
@@ -84,21 +95,22 @@ public class CameraController : MonoBehaviour {
         if (Input.touchCount > 0) {
             Touch touch = Input.GetTouch(0);
 
-            if (touch.phase == UnityEngine.TouchPhase.Began) {
-                // 1. Is it over UI (Joystick/Buttons)? 
-                // 2. Is it over a Card/Deck?
-                if (!EventSystem.current.IsPointerOverGameObject(touch.fingerId) && !IsOverObject()) {
+            if (touch.phase == TouchPhase.Began) {
+                // Use our new custom logic for mobile as well
+                if (objectSelect.CanCameraRotate()) {
+                    Debug.Log("<color=olive>[Camera]</color> Rotation Started (Touch)");
                     isRotating = true;
                     activeFingerId = touch.fingerId;
                 }
             }
 
             if (isRotating && touch.fingerId == activeFingerId) {
-                if (touch.phase == UnityEngine.TouchPhase.Moved) {
+                if (touch.phase == TouchPhase.Moved) {
                     ApplyRotation(touch.deltaPosition.x * lookSensitivity, touch.deltaPosition.y * lookSensitivity);
                 }
 
-                if (touch.phase == UnityEngine.TouchPhase.Ended || touch.phase == UnityEngine.TouchPhase.Canceled) {
+                if (touch.phase == TouchPhase.Ended || touch.phase == TouchPhase.Canceled) {
+                    Debug.Log("<color=olive>[Camera]</color> Rotation Ended (Touch)");
                     isRotating = false;
                     activeFingerId = -1;
                 }
@@ -106,9 +118,10 @@ public class CameraController : MonoBehaviour {
         }
     }
 
+    // IsOverObject is now redundant because CanCameraRotate handles it, 
+    // but we'll keep the helper method if you need it elsewhere.
     private bool IsOverObject() {
         if (objectSelect == null) return false;
-
         return objectSelect.IsPointerOverDraggable();
     }
 
@@ -118,14 +131,14 @@ public class CameraController : MonoBehaviour {
         pitch = Mathf.Clamp(pitch, -80f, 80f);
         transform.localRotation = Quaternion.Euler(pitch, yaw, 0f);
     }
+
     private void ApplyMovement() {
         if (moveInput == Vector3.zero && elevationInput == 0) return;
 
         Vector3 direction = (transform.forward * moveInput.z) + (transform.right * moveInput.x);
-        direction.y = 0; // Keep movement on the horizontal plane
+        direction.y = 0;
 
         float currentHorizontalSpeed = direction.magnitude * moveSpeed;
-
         Vector3 elevation = Vector3.up * elevationInput * elevationSpeed;
 
         transform.position += (direction.normalized * currentHorizontalSpeed + elevation) * Time.deltaTime;
@@ -149,7 +162,7 @@ public class CameraController : MonoBehaviour {
         while (elapsed < focusDuration) {
             elapsed += Time.deltaTime;
             float t = elapsed / focusDuration;
-            t = t * t * (3f - 2f * t); // Smoothstep
+            t = t * t * (3f - 2f * t);
 
             transform.position = Vector3.Lerp(startPos, anchor.position, t);
             transform.rotation = Quaternion.Slerp(startRot, anchor.rotation, t);
@@ -159,7 +172,6 @@ public class CameraController : MonoBehaviour {
         transform.position = anchor.position;
         transform.rotation = anchor.rotation;
 
-        // Sync variables so joystick movement doesn't snap
         Vector3 finalEuler = transform.localRotation.eulerAngles;
         pitch = finalEuler.x;
         if (pitch > 180) pitch -= 360;

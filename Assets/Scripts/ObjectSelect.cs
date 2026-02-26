@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Collections.Generic;
 using TMPro.Examples;
 using UnityEngine;
 using UnityEngine.EventSystems;
@@ -9,62 +10,70 @@ public class ObjectSelect : MonoBehaviour {
     [SerializeField] private CardMenu cardMenu;
     [SerializeField] private CancelDeckAddMenu cancelDeckAddMenu;
 
-    [Header("Drag")]
+    [Header("Drag Settings")]
     [SerializeField] private float dragThresholdPixels = 8f;
     [SerializeField] private float maxDragSpeed = 10f;
     [SerializeField] private float dragResponsiveness = 25f;
 
     [Header("Hand System")]
-    [SerializeField] private float handCheckRadius = 1.0f; // Distance to search for a Seat
-    [SerializeField] private LayerMask handLayer; // Optional: Set your Seats to a specific layer
+    [SerializeField] private float handCheckRadius = 1.0f;
+    [SerializeField] private LayerMask handLayer;
 
-    [Header("Bounds")]
+    [Header("Physics & Bounds")]
     [SerializeField] private float boundsPushForce = 40f;
-
-    [Header("Highlight")]
     [SerializeField] private HighlightController highlight;
-
-    //[SerializeField] private CameraController cameraController;
 
     private Deck selectedDeck;
     private CardView selectedCardView;
     private HoverWhileDragged hoverComponent;
-
-    private enum InputState {
-        Idle,
-        PressedObject,
-        Dragging,
-        ChoosingDeckForCard
-    }
-
+    private enum InputState { Idle, PressedObject, Dragging, ChoosingDeckForCard }
     private InputState state = InputState.Idle;
+
     private Vector2 pointerDownScreenPos;
     private bool didDrag;
-
     private GameObject pressedCandidate;
     private Rigidbody draggedRb;
     private DraggedMarker draggedMarker;
+    private Collider tableCollider;
 
     [SerializeField] private float markerKeepTime = 0.15f;
     private Coroutine removeMarkerCoroutine;
 
-    private Collider tableCollider;
-
     private Card pendingCard = null;
     private GameObject pendingCardGO = null;
-    private bool suppressNextPointerUp = false;
+
+    // ==========================================
+    // CAMERA SYSTEM INTEGRATION
+    // ==========================================
+
+    /// <summary>
+    /// Call this from your Camera Controller script!
+    /// If this returns true, the camera is allowed to rotate.
+    /// </summary>
+    public bool CanCameraRotate() {
+        // 1. If we are currently dragging a card, don't rotate.
+        if (state == InputState.Dragging) return false;
+
+        // 2. If the pointer is over ACTUAL UI (Layer 5), don't rotate.
+        if (IsPointerOverUI()) return false;
+
+        // 3. If we just clicked on a card/deck but haven't dragged it yet, block rotation
+        if (state == InputState.PressedObject && pressedCandidate != null && pressedCandidate.CompareTag("MoveableObject")) return false;
+
+        // Otherwise, we are clicking the floor or empty space: Rotation is OK!
+        return true;
+    }
 
     void Start() {
+        Debug.Log("<color=cyan>[ObjectSelect]</color> System Online. Unity 6 Version: " + Application.unityVersion);
         if (deckMenu != null) deckMenu.controller = this;
         if (cardMenu != null) cardMenu.controller = this;
         if (cancelDeckAddMenu != null) cancelDeckAddMenu.controller = this;
 
-        HideAllMenus();
-        ClearSelection();
-
         GameObject floor = GameObject.FindGameObjectWithTag("Floor");
-        if (floor != null)
+        if (floor != null) {
             tableCollider = floor.GetComponent<Collider>();
+        }
     }
 
     void Update() {
@@ -78,29 +87,23 @@ public class ObjectSelect : MonoBehaviour {
         }
     }
 
-    // =====================
-    // INPUT
-    // =====================
-
     private void HandlePointer() {
-        bool overUI = IsPointerOverUI();
-
         if (PointerDown()) {
             pointerDownScreenPos = PointerPosition();
             didDrag = false;
 
-            // If clicking UI, stop here so we don't close menus
-            if (overUI) return;
+            // If clicking actual UI, stop here.
+            if (IsPointerOverUI()) return;
 
             GameObject hit = RaycastWorldObject();
-
             if (hit == null) {
-                // Only hide menus if we actually click the empty table
+                // Clicked Floor or Space
                 HideAllMenus();
                 ClearSelection();
                 pressedCandidate = null;
                 state = InputState.Idle;
             } else {
+                // Clicked a Card/Deck
                 pressedCandidate = hit;
                 state = InputState.PressedObject;
             }
@@ -108,45 +111,39 @@ public class ObjectSelect : MonoBehaviour {
 
         if (PointerHeld()) {
             if (state == InputState.PressedObject && !didDrag) {
-                // FIXED: Using the correct variable name 'dragThresholdPixels'
                 if (Vector2.Distance(pointerDownScreenPos, PointerPosition()) > dragThresholdPixels) {
                     didDrag = true;
                     BeginDrag();
                 }
             }
-
-            if (state == InputState.Dragging) {
-                ApplyDragVelocity(); // Call this in Update or FixedUpdate; here for logic flow
-            }
         }
 
         if (PointerUp()) {
-            if (overUI) return;
-
-            if (state == InputState.Dragging) {
+            if (state == InputState.ChoosingDeckForCard) {
+                HandleAddToDeckClick();
+            } else if (state == InputState.Dragging) {
                 EndDrag();
                 state = InputState.Idle;
             } else if (state == InputState.PressedObject && !didDrag) {
-                // This ensures the click is processed and menu shown
                 ConfirmClick();
+                state = InputState.Idle;
+            } else {
                 state = InputState.Idle;
             }
         }
     }
-    // =====================
-    // DRAGGING
-    // =====================
 
     private void BeginDrag() {
         if (pressedCandidate == null) return;
 
+        draggedRb = pressedCandidate.GetComponent<Rigidbody>();
+        if (draggedRb == null) {
+            state = InputState.Idle;
+            return;
+        }
+
         CardView card = pressedCandidate.GetComponent<CardView>();
-        Quaternion resetRot = pressedCandidate.transform.rotation;
-        resetRot.x = 0f;
-        resetRot.z = 0f;
-        pressedCandidate.transform.rotation = resetRot;
         if (card != null) {
-            // Find all hand scripts in the scene and see if any contain this card
             PlayerHand[] allHands = FindObjectsByType<PlayerHand>(FindObjectsSortMode.None);
             foreach (var hand in allHands) {
                 if (hand.cardsInHand.Contains(card)) {
@@ -156,59 +153,34 @@ public class ObjectSelect : MonoBehaviour {
             }
         }
 
-        draggedRb = pressedCandidate.GetComponent<Rigidbody>();
-        if (draggedRb == null) return;
-
         hoverComponent = pressedCandidate.GetComponent<HoverWhileDragged>();
         if (hoverComponent != null) hoverComponent.BeginHover();
 
         draggedMarker = pressedCandidate.GetComponent<DraggedMarker>();
         if (draggedMarker == null) draggedMarker = pressedCandidate.AddComponent<DraggedMarker>();
 
-        if (removeMarkerCoroutine != null) {
-            StopCoroutine(removeMarkerCoroutine);
-            removeMarkerCoroutine = null;
-        }
-
-        draggedRb.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
-        draggedRb.interpolation = RigidbodyInterpolation.Interpolate;
+        if (removeMarkerCoroutine != null) StopCoroutine(removeMarkerCoroutine);
 
         state = InputState.Dragging;
     }
 
     private void ApplyDragVelocity() {
+        Plane tablePlane = new Plane(Vector3.up, new Vector3(0, draggedRb.position.y, 0));
         Ray ray = Camera.main.ScreenPointToRay(PointerPosition());
-        if (!Physics.Raycast(ray, out RaycastHit hit)) return;
 
-        Vector3 target = new Vector3(hit.point.x, draggedRb.position.y, hit.point.z);
-        Vector3 toTarget = target - draggedRb.position;
-        toTarget.y = 0f;
+        if (tablePlane.Raycast(ray, out float distance)) {
+            Vector3 target = ray.GetPoint(distance);
+            Vector3 toTarget = target - draggedRb.position;
+            toTarget.y = 0f;
 
-        Vector3 desired = toTarget * dragResponsiveness;
-        if (desired.magnitude > maxDragSpeed)
-            desired = desired.normalized * maxDragSpeed;
+            Vector3 desired = toTarget * dragResponsiveness;
+            if (desired.magnitude > maxDragSpeed) desired = desired.normalized * maxDragSpeed;
 
-        Vector3 v = draggedRb.linearVelocity;
-        v.x = desired.x;
-        v.z = desired.z;
-        draggedRb.linearVelocity = v;
-    }
-
-    private void ApplySoftBounds() {
-        if (tableCollider == null || draggedRb == null) return;
-
-        Bounds b = tableCollider.bounds;
-        Vector3 p = draggedRb.position;
-        Vector3 push = Vector3.zero;
-
-        if (p.x < b.min.x) push.x = 1f;
-        else if (p.x > b.max.x) push.x = -1f;
-
-        if (p.z < b.min.z) push.z = 1f;
-        else if (p.z > b.max.z) push.z = -1f;
-
-        if (push != Vector3.zero)
-            draggedRb.AddForce(push.normalized * boundsPushForce, ForceMode.Acceleration);
+            Vector3 v = draggedRb.linearVelocity;
+            v.x = desired.x;
+            v.z = desired.z;
+            draggedRb.linearVelocity = v;
+        }
     }
 
     private void EndDrag() {
@@ -218,8 +190,8 @@ public class ObjectSelect : MonoBehaviour {
         }
 
         if (draggedRb != null) {
-            // NEW: Check if we dropped the card over a hand trigger
             CheckForHandDrop(draggedRb.gameObject);
+            draggedRb.linearVelocity = Vector3.zero;
             draggedRb.angularVelocity = Vector3.zero;
         }
 
@@ -232,74 +204,17 @@ public class ObjectSelect : MonoBehaviour {
         pressedCandidate = null;
     }
 
-    // NEW: Helper to detect if a card was dropped into a Seat/Hand
-    private void CheckForHandDrop(GameObject obj) {
-        CardView card = obj.GetComponent<CardView>();
-        if (card == null) return;
-
-        // Look for the nearest PlayerHand trigger
-        Collider[] hitColliders = Physics.OverlapSphere(obj.transform.position, handCheckRadius);
-        foreach (var hit in hitColliders) {
-            PlayerHand hand = hit.GetComponent<PlayerHand>();
-            if (hand != null) {
-                hand.AddCard(card);
-                break;
-            }
-        }
-    }
-
-    private IEnumerator RemoveDraggedMarkerAfterDelay(GameObject obj) {
-        yield return new WaitForSeconds(markerKeepTime);
-        if (obj != null)
-            Destroy(obj.GetComponent<DraggedMarker>());
-    }
-
-    // =====================
-    // CLICK LOGIC
-    // =====================
-
     private void ConfirmClick() {
         if (pressedCandidate == null) return;
-
-        // 1. Always hide any existing menu first to prevent overlaps
-        HideAllMenus();
-
-        // 2. Clear old selection data
-        ClearSelection();
-
-        // 3. Set the new selection and show its specific menu
-        // This function should handle setting selectedCardView/selectedDeck and opening the UI
         SelectObject(pressedCandidate);
     }
 
-    private void HandleAddToDeckClick() {
-        GameObject hitObj = RaycastWorldObject();
-
-        if (hitObj != null) {
-            Deck deck = hitObj.GetComponentInParent<Deck>();
-            if (deck != null && pendingCard != null) {
-                deck.AddCard(pendingCard);
-                if (pendingCardGO != null) Destroy(pendingCardGO);
-            }
-        }
-
-        pendingCard = null;
-        pendingCardGO = null;
-        ClearSelectionAndMenus();
-        state = InputState.Idle;
-    }
-
     private void SelectObject(GameObject obj) {
-        if (obj == null || !obj.CompareTag("MoveableObject")) {
-            ClearSelectionAndMenus();
-            return;
-        }
+        if (obj == null || !obj.CompareTag("MoveableObject")) return;
 
         ClearSelection();
         if (highlight != null) highlight.Show(obj);
 
-        // FIXED: Use GetComponentInParent to ensure we find the script 
-        // even if the collider is on a child object
         selectedDeck = obj.GetComponentInParent<Deck>();
         selectedCardView = obj.GetComponentInParent<CardView>();
 
@@ -310,85 +225,133 @@ public class ObjectSelect : MonoBehaviour {
         }
     }
 
-    public bool IsPointerOverDraggable() {
-        GameObject hit = RaycastWorldObject();
-        if (hit == null) return false;
+    public GameObject RaycastWorldObject() {
+        Ray ray = Camera.main.ScreenPointToRay(PointerPosition());
+        RaycastHit[] hits = Physics.RaycastAll(ray, 100f);
+        System.Array.Sort(hits, (x, y) => x.distance.CompareTo(y.distance));
 
-        // This ensures the Camera script knows to rotate if we click the Floor (no tag)
-        return hit.tag == "MoveableObject";
+        foreach (var hit in hits) {
+            if (hit.collider.CompareTag("MoveableObject")) return hit.collider.gameObject;
+            if (hit.collider.CompareTag("Floor")) return null;
+        }
+        return null;
     }
 
-    // =====================
-    // UI CALLBACKS
-    // =====================
+    public bool IsPointerOverUI() {
+        if (EventSystem.current == null) return false;
+
+        PointerEventData eventData = new PointerEventData(EventSystem.current) { position = PointerPosition() };
+
+#if UNITY_ANDROID && !UNITY_EDITOR
+        if (Input.touchCount > 0) eventData.pointerId = Input.GetTouch(0).fingerId;
+        else return false;
+#else
+        eventData.pointerId = -1;
+#endif
+
+        List<RaycastResult> results = new List<RaycastResult>();
+        EventSystem.current.RaycastAll(eventData, results);
+
+        foreach (var result in results) {
+            // ONLY block if it hits Layer 5 (UI). 
+            // This prevents the "Floor" (Layer 8) from blocking the camera.
+            if (result.gameObject.layer == 5) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // --- HELPER FUNCTIONS ---
 
     public void OnCardMenuAddToDeckPressed() {
         if (selectedCardView == null) return;
         pendingCard = selectedCardView.GetCardData();
         pendingCardGO = selectedCardView.gameObject;
-        ClearSelection();
-        HideAllMenus();
+        ClearSelectionAndMenus();
         cancelDeckAddMenu.Show();
-        suppressNextPointerUp = true;
         state = InputState.ChoosingDeckForCard;
     }
 
     public void OnCardMenuAddToHandPressed() {
         if (selectedCardView == null || GameManager.Instance == null) return;
-
         PlayerHand myHand = GameManager.Instance.MyHand;
-
-        if (myHand == null) {
-            Debug.LogError("PlayerHand not found! Check your GameManager seat assignments.");
-            return;
-        }
-
-        PlayerHand[] allHands = FindObjectsByType<PlayerHand>(FindObjectsSortMode.None);
-        foreach (var hand in allHands) {
-            if (hand.cardsInHand.Contains(selectedCardView)) {
-                hand.RemoveCard(selectedCardView);
-                break;
+        if (myHand != null) {
+            PlayerHand[] allHands = FindObjectsByType<PlayerHand>(FindObjectsSortMode.None);
+            foreach (var hand in allHands) {
+                if (hand.cardsInHand.Contains(selectedCardView)) {
+                    hand.RemoveCard(selectedCardView);
+                    break;
+                }
             }
+            myHand.AddCard(selectedCardView);
         }
-
-        myHand.AddCard(selectedCardView);
-
-        ClearSelectionAndMenus();
-        state = InputState.Idle;
+        MenuActionCompleted();
     }
 
-    public void onCancelDeckAddPressed() {
+    public void onCancelDeckAddPressed() => MenuActionCompleted();
+
+    public void MenuActionCompleted() {
         pendingCard = null;
         pendingCardGO = null;
         ClearSelectionAndMenus();
         state = InputState.Idle;
     }
 
-    public void MenuActionCompleted() {
-        ClearSelectionAndMenus();
-        state = InputState.Idle;
+    private void HandleAddToDeckClick() {
+        GameObject hitObj = RaycastWorldObject();
+        if (hitObj != null) {
+            Deck deck = hitObj.GetComponentInParent<Deck>();
+            if (deck != null && pendingCard != null) {
+                deck.AddCard(pendingCard);
+                if (pendingCardGO != null) Destroy(pendingCardGO);
+            }
+        }
+        MenuActionCompleted();
     }
 
     public void OnFocusOnHandButtonPressed() {
-        if (GameManager.Instance == null || GameManager.Instance.MyHand == null) {
-            Debug.LogWarning("Local player hand not found!");
-            return;
+        if (GameManager.Instance?.MyHand?.cameraAnchor != null) {
+            CameraController.Instance?.FocusOnTransform(GameManager.Instance.MyHand.cameraAnchor);
         }
+    }
 
-        Transform anchor = GameManager.Instance.MyHand.cameraAnchor;
+    public bool IsPointerOverDraggable() {
+        if (state == InputState.Dragging) return true;
+        GameObject hit = RaycastWorldObject();
+        return hit != null && hit.CompareTag("MoveableObject");
+    }
 
-        if (anchor != null) {
-            Debug.Log("anchor valid");
-            if (CameraController.Instance != null) {
-                Debug.Log("found it all");
-                CameraController.Instance.FocusOnTransform(anchor);
+    private void CheckForHandDrop(GameObject obj) {
+        CardView card = obj.GetComponent<CardView>();
+        if (card == null) return;
+        Collider[] hitColliders = Physics.OverlapSphere(obj.transform.position, handCheckRadius);
+        foreach (var hit in hitColliders) {
+            PlayerHand hand = hit.GetComponent<PlayerHand>();
+            if (hand != null) {
+                hand.AddCard(card);
+                break;
             }
         }
     }
 
-    // =====================
-    // HELPERS
-    // =====================
+    private void ApplySoftBounds() {
+        if (tableCollider == null || draggedRb == null) return;
+        Bounds b = tableCollider.bounds;
+        Vector3 p = draggedRb.position;
+        Vector3 push = Vector3.zero;
+        if (p.x < b.min.x) push.x = 1f; else if (p.x > b.max.x) push.x = -1f;
+        if (p.z < b.min.z) push.z = 1f; else if (p.z > b.max.z) push.z = -1f;
+        if (push != Vector3.zero) draggedRb.AddForce(push.normalized * boundsPushForce, ForceMode.Acceleration);
+    }
+
+    private IEnumerator RemoveDraggedMarkerAfterDelay(GameObject obj) {
+        yield return new WaitForSeconds(markerKeepTime);
+        if (obj != null) {
+            var marker = obj.GetComponent<DraggedMarker>();
+            if (marker) Destroy(marker);
+        }
+    }
 
     private void ClearSelection() {
         selectedDeck = null;
@@ -402,77 +365,37 @@ public class ObjectSelect : MonoBehaviour {
     }
 
     private void HideAllMenus() {
-        if (deckMenu != null) deckMenu.Hide();
-        if (cardMenu != null) cardMenu.Hide();
-        if (cancelDeckAddMenu != null) cancelDeckAddMenu.Hide();
+        if (deckMenu) deckMenu.Hide();
+        if (cardMenu) cardMenu.Hide();
+        if (cancelDeckAddMenu) cancelDeckAddMenu.Hide();
     }
 
-    public GameObject RaycastWorldObject() {
-        Ray ray = Camera.main.ScreenPointToRay(PointerPosition());
-
-        // Hit everything, including Triggers (cards in hand)
-        RaycastHit[] hits = Physics.RaycastAll(ray, Mathf.Infinity, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Collide);
-
-        System.Array.Sort(hits, (x, y) => x.distance.CompareTo(y.distance));
-
-        foreach (RaycastHit hit in hits) {
-            // Return the first object tagged MoveableObject
-            if (hit.collider.gameObject.CompareTag("MoveableObject")) {
-                return hit.collider.gameObject;
-            }
-        }
-        return null;
-    }
-
-    // =====================
-    // INPUT UTILS
-    // =====================
-
-    Vector2 PointerPosition() {
-#if UNITY_ANDROID
-        return Input.touchCount > 0 ? Input.GetTouch(0).position : Vector2.zero;
-#else
-        return Input.mousePosition;
-#endif
-    }
-
-    bool PointerDown() {
-#if UNITY_ANDROID
-        return Input.touchCount > 0 && Input.GetTouch(0).phase == TouchPhase.Began;
-#else
-        return Input.GetMouseButtonDown(0);
-#endif
-    }
-
-    bool PointerHeld() {
-#if UNITY_ANDROID
-        return Input.touchCount > 0 &&
-               (Input.GetTouch(0).phase == TouchPhase.Moved ||
-                Input.GetTouch(0).phase == TouchPhase.Stationary);
-#else
-        return Input.GetMouseButton(0);
-#endif
-    }
-
-    bool PointerUp() {
-#if UNITY_ANDROID
-        return Input.touchCount > 0 && Input.GetTouch(0).phase == TouchPhase.Ended;
-#else
-        return Input.GetMouseButtonUp(0);
-#endif
-    }
-
-    private bool IsPointerOverUI() {
-        if (EventSystem.current == null) return false;
-
+    // --- INPUT WRAPPERS ---
+    Vector2 PointerPosition() =>
 #if UNITY_ANDROID && !UNITY_EDITOR
-    // On Android, we must check the specific touch ID
-    if (Input.touchCount > 0) {
-        return EventSystem.current.IsPointerOverGameObject(Input.GetTouch(0).fingerId);
-    }
-    return false;
+        Input.touchCount > 0 ? Input.GetTouch(0).position : Vector2.zero;
 #else
-        return EventSystem.current.IsPointerOverGameObject();
+        Input.mousePosition;
 #endif
-    }
+
+    bool PointerDown() =>
+#if UNITY_ANDROID && !UNITY_EDITOR
+        Input.touchCount > 0 && Input.GetTouch(0).phase == TouchPhase.Began;
+#else
+        Input.GetMouseButtonDown(0);
+#endif
+
+    bool PointerHeld() =>
+#if UNITY_ANDROID && !UNITY_EDITOR
+        Input.touchCount > 0 && (Input.GetTouch(0).phase == TouchPhase.Moved || Input.GetTouch(0).phase == TouchPhase.Stationary);
+#else
+        Input.GetMouseButton(0);
+#endif
+
+    bool PointerUp() =>
+#if UNITY_ANDROID && !UNITY_EDITOR
+        Input.touchCount > 0 && Input.GetTouch(0).phase == TouchPhase.Ended;
+#else
+        Input.GetMouseButtonUp(0);
+#endif
 }

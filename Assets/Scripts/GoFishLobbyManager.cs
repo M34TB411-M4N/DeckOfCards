@@ -1,9 +1,10 @@
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
-using UnityEngine.SceneManagement;
+using Unity.Netcode; // Essential for Networking
+using Unity.Collections;
 
-public class GoFishLobbyManager : MonoBehaviour {
+public class GoFishLobbyManager : NetworkBehaviour { // Changed from MonoBehaviour
     [Header("UI References")]
     public TMP_Dropdown playerDropdown;
     public TMP_Dropdown deckDropdown;
@@ -11,38 +12,76 @@ public class GoFishLobbyManager : MonoBehaviour {
     public TextMeshProUGUI warningText;
     public Button startButton;
 
-    void Start() {
-        // Initialize UI with default values
-        playerDropdown.onValueChanged.AddListener(delegate { OnSettingsChanged(); });
-        deckDropdown.onValueChanged.AddListener(delegate { OnSettingsChanged(); });
-        modeDropdown.onValueChanged.AddListener(delegate { OnSettingsChanged(); });
+    // --- Network Variables ---
+    // These sync automatically from Server to all Clients.
+    // We store the 'index' of the dropdown to keep it simple.
+    private NetworkVariable<int> netPlayerIndex = new NetworkVariable<int>(0, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+    private NetworkVariable<int> netDeckIndex = new NetworkVariable<int>(0, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+    private NetworkVariable<int> netModeIndex = new NetworkVariable<int>(0, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
 
-        OnSettingsChanged();
+    public override void OnNetworkSpawn() {
+        // 1. If I am a Client, disable the UI so I can't change the Host's settings
+        if (!IsServer) {
+            playerDropdown.interactable = false;
+            deckDropdown.interactable = false;
+            modeDropdown.interactable = false;
+            startButton.gameObject.SetActive(false); // Hide start button for clients
+            warningText.text = "Waiting for Host to finalize settings...";
+        }
+
+        // 2. Subscribe to network changes so UI updates when the Host moves a dropdown
+        netPlayerIndex.OnValueChanged += (oldVal, newVal) => { playerDropdown.value = newVal; RefreshLocalSettings(); };
+        netDeckIndex.OnValueChanged += (oldVal, newVal) => { deckDropdown.value = newVal; RefreshLocalSettings(); };
+        netModeIndex.OnValueChanged += (oldVal, newVal) => { modeDropdown.value = newVal; RefreshLocalSettings(); };
+
+        // 3. Set up the Host's listeners
+        if (IsServer) {
+            playerDropdown.onValueChanged.AddListener(OnHostUIChanged);
+            deckDropdown.onValueChanged.AddListener(OnHostUIChanged);
+            modeDropdown.onValueChanged.AddListener(OnHostUIChanged);
+        }
+
+        RefreshLocalSettings();
     }
 
-    public void OnSettingsChanged() {
-        int players = playerDropdown.value + 2; // Value 0 = 2 players
-        int decks = deckDropdown.value + 1;    // Value 0 = 1 deck
+    // Called only by the Host's UI interactions
+    private void OnHostUIChanged(int _) {
+        if (!IsServer) return;
 
-        // Rule: > 4 players requires at least 2 decks
+        // Update the NetworkVariables - this sends the data to BlueStacks!
+        netPlayerIndex.Value = playerDropdown.value;
+        netDeckIndex.Value = deckDropdown.value;
+        netModeIndex.Value = modeDropdown.value;
+
+        RefreshLocalSettings();
+    }
+
+    // This handles the logic (Warning text, Static class saving) for everyone
+    public void RefreshLocalSettings() {
+        int players = playerDropdown.value + 2;
+        int decks = deckDropdown.value + 1;
+
         if (players > 4 && decks < 2) {
             warningText.text = "Error: More than 4 players requires at least 2 decks!";
             warningText.color = Color.red;
-            startButton.interactable = false;
+            if (IsServer) startButton.interactable = false;
         } else {
-            warningText.text = "Settings Valid";
-            warningText.color = Color.green;
-            startButton.interactable = true;
+            warningText.text = IsServer ? "Settings Valid" : "Host is configuring...";
+            warningText.color = IsServer ? Color.green : Color.white;
+            if (IsServer) startButton.interactable = true;
         }
 
-        // Save to static class
+        // Save to your static class so the next scene can read it
         GoFishSettings.PlayerCount = players;
         GoFishSettings.DeckCount = decks;
         GoFishSettings.CurrentMode = (GoFishSettings.ScoringMode)modeDropdown.value;
     }
 
     public void StartGame() {
-        // Replace "GoFish_Game" with your actual game scene name
-        SceneManager.LoadScene("GoFishLobby");
+        if (!IsServer) return; // Only the host can start
+
+        // IMPORTANT: Use the Network Scene Manager to pull the Client with you!
+        // Replace "GoFish_Table" with your actual playing scene name
+        NetworkManager.Singleton.SceneManager.LoadScene("GoFishLobby", UnityEngine.SceneManagement.LoadSceneMode.Single);
     }
 }
