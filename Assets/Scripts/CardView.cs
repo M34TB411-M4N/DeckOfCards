@@ -1,26 +1,55 @@
 using UnityEngine;
 
 public class CardView : MonoBehaviour {
-    private Card card;
+    [Header("Data")]
+    [SerializeField] private Card card;
     [SerializeField] private Rank rank;
     [SerializeField] private Suit suit;
 
+    [Header("Visuals")]
+    [Tooltip("Drag the Card_Face Quad's SpriteRenderer here")]
+    public SpriteRenderer faceRenderer;
+
+    [Header("Prefabs")]
     [SerializeField] private GameObject pilePrefab;
+
     public void Initialize(Card card) {
         this.card = card;
         this.rank = card.rank;
         this.suit = card.suit;
         UpdateVisuals();
     }
+
     public Card GetCardData() {
         return card;
     }
 
-    public void SetCardData(Card card) { this.card = card; }
+    public void SetCardData(Card card) {
+        this.card = card;
+        this.rank = card.rank;
+        this.suit = card.suit;
+        UpdateVisuals();
+    }
 
     void UpdateVisuals() {
-        // Set sprite, text, mesh, etc. based on card.suit and card.rank
-        Debug.Log($"{card.rank} of {card.suit}");
+        if (faceRenderer == null) {
+            Debug.LogWarning($"CardView: No face renderer assigned on {gameObject.name}!");
+            return;
+        }
+
+        if (card == null) return;
+
+        // Construct the string name based on the data to match your Resources folder files
+        string resourceName = $"Cards/{card.suit}_{card.rank}";
+
+        // Load the sprite from the Resources folder
+        Sprite loadedFace = Resources.Load<Sprite>(resourceName);
+
+        if (loadedFace != null) {
+            faceRenderer.sprite = loadedFace;
+        } else {
+            Debug.LogError($"CardView: Could not find image at Resources/{resourceName}");
+        }
     }
 
     public void OnClicked() {

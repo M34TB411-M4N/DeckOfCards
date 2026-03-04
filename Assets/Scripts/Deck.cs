@@ -4,12 +4,24 @@ using UnityEngine;
 using Unity.Netcode;
 
 public class Deck : NetworkBehaviour {
+    [Header("Network Sync State")]
     public NetworkVariable<int> netCardCount = new NetworkVariable<int>(0);
+    public NetworkVariable<Suit> netBottomSuit = new NetworkVariable<Suit>();
+    public NetworkVariable<Rank> netBottomRank = new NetworkVariable<Rank>();
 
+    [Header("Deck Data")]
     [SerializeField] public List<Card> cards = new List<Card>();
     [SerializeField] private GameObject cardPrefab;
     [SerializeField] private Transform drawSpawnPoint;
     [SerializeField] private float dealSpeed = 0.15f;
+
+    [Header("Thickness & Visuals")]
+    [Tooltip("The Cube mesh representing the body of the deck")]
+    [SerializeField] private Transform deckMesh;
+    [Tooltip("The SpriteRenderer on the Quad that acts as the bottom face")]
+    [SerializeField] private SpriteRenderer faceRenderer;
+    [Tooltip("How tall the deck is when it has 52 cards")]
+    [SerializeField] private float maxDeckHeight = 0.2f;
 
     public int cardCount = 0;
 
@@ -17,6 +29,12 @@ public class Deck : NetworkBehaviour {
 
     public override void OnNetworkSpawn() {
         Debug.Log("<color=yellow>[Deck]</color> OnNetworkSpawn triggered.");
+
+        // Listen to updates from the server to resize and re-face the deck visually
+        netCardCount.OnValueChanged += (oldVal, newVal) => UpdateDeckVisuals();
+        netBottomSuit.OnValueChanged += (oldVal, newVal) => UpdateDeckVisuals();
+        netBottomRank.OnValueChanged += (oldVal, newVal) => UpdateDeckVisuals();
+
         if (IsServer) {
             int targetDecks = GoFishSettings.DeckCount > 0 ? GoFishSettings.DeckCount : 1;
             Debug.Log($"<color=yellow>[Deck]</color> Server spawning deck. Target deck multiplier: {targetDecks}");
@@ -25,14 +43,58 @@ public class Deck : NetworkBehaviour {
         } else {
             Debug.Log("<color=yellow>[Deck]</color> Client spawned deck. Waiting for server sync.");
         }
+
+        UpdateDeckVisuals();
+    }
+
+    // --- SERVER STATE HELPER ---
+    // We call this anytime the list of cards changes on the server so clients update visually.
+    private void UpdateServerDeckState() {
+        if (!IsServer) return;
+
+        netCardCount.Value = cards.Count;
+        cardCount = cards.Count;
+
+        if (cards.Count > 0) {
+            // The bottom card is the last one in the list (since index 0 is drawn first)
+            Card bottomCard = cards[cards.Count - 1];
+            netBottomSuit.Value = bottomCard.suit;
+            netBottomRank.Value = bottomCard.rank;
+        }
+    }
+
+    // --- VISUAL THICKNESS & FACE LOGIC ---
+    private void UpdateDeckVisuals() {
+        if (deckMesh != null && faceRenderer != null) {
+            if (netCardCount.Value <= 0) {
+                // Hide the deck if it's empty
+                deckMesh.gameObject.SetActive(false);
+                faceRenderer.gameObject.SetActive(false);
+            } else {
+                deckMesh.gameObject.SetActive(true);
+                faceRenderer.gameObject.SetActive(true);
+
+                // Calculate thickness based on 52 cards being "maxDeckHeight"
+                float heightPercent = Mathf.Clamp01((float)netCardCount.Value / 52f);
+                float currentHeight = Mathf.Max(0.01f, maxDeckHeight * heightPercent); // Never go completely flat
+
+                deckMesh.localScale = new Vector3(deckMesh.localScale.x, currentHeight, deckMesh.localScale.z);
+
+                // Update the bottom face sprite
+                string resourceName = $"Cards/{netBottomSuit.Value}_{netBottomRank.Value}";
+                Sprite loadedFace = Resources.Load<Sprite>(resourceName);
+                if (loadedFace != null) {
+                    faceRenderer.sprite = loadedFace;
+                }
+            }
+        }
     }
 
     public void InitializeWithCards(List<Card> initialCards) {
         if (cards == null) cards = new List<Card>();
         cards.Clear();
         cards.AddRange(initialCards);
-        cardCount = cards.Count;
-        if (IsServer) netCardCount.Value = cards.Count;
+        UpdateServerDeckState();
         Debug.Log($"<color=yellow>[Deck]</color> initialized manually with {cards.Count} cards.");
     }
 
@@ -45,8 +107,7 @@ public class Deck : NetworkBehaviour {
                 }
             }
         }
-        cardCount = cards.Count;
-        netCardCount.Value = cards.Count;
+        UpdateServerDeckState();
         Debug.Log($"<color=yellow>[Deck]</color> Created deck with {cards.Count} cards.");
     }
 
@@ -69,8 +130,7 @@ public class Deck : NetworkBehaviour {
 
         Card topCardData = cards[0];
         cards.RemoveAt(0);
-        netCardCount.Value = cards.Count;
-        cardCount = cards.Count;
+        UpdateServerDeckState();
 
         if (cardPrefab == null || drawSpawnPoint == null) {
             Debug.LogError("<color=red>[Deck]</color> DrawCardServerRpc failed: cardPrefab or drawSpawnPoint is null!");
@@ -106,20 +166,14 @@ public class Deck : NetworkBehaviour {
             return null;
         }
 
-        if (cardPrefab == null) {
-            Debug.LogError("<color=red>[Deck]</color> ServerDrawCard failed: cardPrefab is not assigned in the Inspector!");
-            return null;
-        }
-
-        if (drawSpawnPoint == null) {
-            Debug.LogError("<color=red>[Deck]</color> ServerDrawCard failed: drawSpawnPoint is not assigned in the Inspector!");
+        if (cardPrefab == null || drawSpawnPoint == null) {
+            Debug.LogError("<color=red>[Deck]</color> ServerDrawCard failed: Prefab or SpawnPoint missing!");
             return null;
         }
 
         Card topCardData = cards[0];
         cards.RemoveAt(0);
-        netCardCount.Value = cards.Count;
-        cardCount = cards.Count;
+        UpdateServerDeckState();
 
         Debug.Log("<color=yellow>[Deck]</color> Instantiating card prefab...");
         GameObject newCardObj = Instantiate(cardPrefab, drawSpawnPoint.position, Quaternion.identity);
@@ -168,7 +222,7 @@ public class Deck : NetworkBehaviour {
                 if (targetHand != null) {
                     targetHand.AddCard(newCardView);
                 } else {
-                    Debug.LogError("<color=red>[Deck]</color> SetCardDataClientRpc: PlayerHand component missing on seat object!");
+                    Debug.LogError("<color=red>[Deck]</color> SetCardDataClientRpc: PlayerHand missing on seat object!");
                 }
             } else {
                 Debug.LogError($"<color=red>[Deck]</color> SetCardDataClientRpc: Could not find seat with NetID {targetSeatNetworkId}!");
@@ -180,8 +234,7 @@ public class Deck : NetworkBehaviour {
 
     public void AddCard(Card card) {
         cards.Add(card);
-        cardCount = cards.Count;
-        if (IsServer) netCardCount.Value = cards.Count;
+        UpdateServerDeckState();
     }
 
     public void Shuffle() {
@@ -190,6 +243,7 @@ public class Deck : NetworkBehaviour {
             int rand = Random.Range(i, cards.Count);
             (cards[i], cards[rand]) = (cards[rand], cards[i]);
         }
+        UpdateServerDeckState();
         Debug.Log("<color=yellow>[Deck]</color> Deck shuffled.");
     }
 
@@ -226,8 +280,7 @@ public class Deck : NetworkBehaviour {
 
         Card topCardData = cards[0];
         cards.RemoveAt(0);
-        netCardCount.Value = cards.Count;
-        cardCount = cards.Count;
+        UpdateServerDeckState();
 
         float offsetDistance = cardPrefab.gameObject.transform.localScale.x * 1.1f;
         Vector3 finalSpawnPos = transform.position + (Vector3.up * 0.2f);
