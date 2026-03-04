@@ -1,10 +1,8 @@
 using System.Collections;
 using System.Collections.Generic;
-using TMPro.Examples;
 using UnityEngine;
 using UnityEngine.EventSystems;
 
-// This ensures ObjectSelect runs BEFORE the CameraController
 [DefaultExecutionOrder(-100)]
 public class ObjectSelect : MonoBehaviour {
     [Header("Menus")]
@@ -28,9 +26,10 @@ public class ObjectSelect : MonoBehaviour {
     private Deck selectedDeck;
     private CardView selectedCardView;
     private HoverWhileDragged hoverComponent;
+
     public enum InputState { Idle, PressedObject, Dragging, ChoosingDeckForCard }
     private InputState state = InputState.Idle;
-    public InputState CurrentState => state; // Public getter for Camera
+    public InputState CurrentState => state;
 
     private Vector2 pointerDownScreenPos;
     private bool didDrag;
@@ -45,19 +44,23 @@ public class ObjectSelect : MonoBehaviour {
     private Card pendingCard = null;
     private GameObject pendingCardGO = null;
 
+    // --- REQUIRED CAMERA/UTILITY CHECKS ---
     public bool CanCameraRotate() {
-        // 1. If we are currently dragging, block.
         if (state == InputState.Dragging) return false;
-        // 2. If we just clicked a card but haven't moved it enough to "drag" yet, block.
+        if (state == InputState.ChoosingDeckForCard) return false;
         if (state == InputState.PressedObject && pressedCandidate != null && pressedCandidate.CompareTag("MoveableObject")) return false;
-        // 3. If we are over UI, block.
         if (IsPointerOverUI()) return false;
-
         return true;
     }
 
+    public bool IsPointerOverDraggable() {
+        if (state == InputState.Dragging) return true;
+        GameObject hit = RaycastWorldObject();
+        return hit != null && hit.CompareTag("MoveableObject");
+    }
+
+    // --- INITIALIZATION ---
     void Start() {
-        Debug.Log("<color=cyan>[ObjectSelect]</color> Online.");
         if (deckMenu != null) deckMenu.controller = this;
         if (cardMenu != null) cardMenu.controller = this;
         if (cancelDeckAddMenu != null) cancelDeckAddMenu.controller = this;
@@ -77,6 +80,7 @@ public class ObjectSelect : MonoBehaviour {
         }
     }
 
+    // --- INPUT HANDLING ---
     private void HandlePointer() {
         if (PointerDown()) {
             pointerDownScreenPos = PointerPosition();
@@ -84,10 +88,17 @@ public class ObjectSelect : MonoBehaviour {
 
             if (IsPointerOverUI()) return;
 
+            // --- THE FIX ---
+            // Handle deck selection the moment the finger touches the screen. 
+            // This prevents the UI button's "PointerUp" from instantly canceling the action.
+            if (state == InputState.ChoosingDeckForCard) {
+                HandleAddToDeckClick();
+                return; // Exit so we don't accidentally select a new object
+            }
+
             GameObject hit = RaycastWorldObject();
             if (hit == null) {
-                HideAllMenus();
-                ClearSelection();
+                ClearSelectionAndMenus();
                 pressedCandidate = null;
                 state = InputState.Idle;
             } else {
@@ -106,9 +117,11 @@ public class ObjectSelect : MonoBehaviour {
         }
 
         if (PointerUp()) {
-            if (state == InputState.ChoosingDeckForCard) {
-                HandleAddToDeckClick();
-            } else if (state == InputState.Dragging) {
+            // --- THE FIX PART 2 ---
+            // If we are in the middle of choosing a deck, ignore PointerUp completely.
+            if (state == InputState.ChoosingDeckForCard) return;
+
+            if (state == InputState.Dragging) {
                 EndDrag();
                 state = InputState.Idle;
             } else if (state == InputState.PressedObject && !didDrag) {
@@ -119,7 +132,91 @@ public class ObjectSelect : MonoBehaviour {
             }
         }
     }
+    // --- INTERACTION LOGIC ---
+    private void ConfirmClick() {
+        if (pressedCandidate == null) return;
+        SelectObject(pressedCandidate);
+    }
 
+    private void SelectObject(GameObject obj) {
+        if (obj == null || !obj.CompareTag("MoveableObject")) return;
+
+        ClearSelectionAndMenus();
+        if (highlight != null) highlight.Show(obj);
+
+        selectedDeck = obj.GetComponentInParent<Deck>();
+        selectedCardView = obj.GetComponentInParent<CardView>();
+
+        if (selectedDeck != null) deckMenu.Show(selectedDeck, PointerPosition());
+        else if (selectedCardView != null) cardMenu.Show(selectedCardView, PointerPosition());
+    }
+
+    private void HandleAddToDeckClick() {
+        Ray ray = Camera.main.ScreenPointToRay(PointerPosition());
+        RaycastHit[] hits = Physics.RaycastAll(ray, 100f);
+        System.Array.Sort(hits, (x, y) => x.distance.CompareTo(y.distance));
+
+        bool success = false;
+        foreach (var hit in hits) {
+            Deck deck = hit.collider.GetComponentInParent<Deck>();
+
+            if (deck != null && pendingCard != null) {
+                deck.AddCard(pendingCard);
+                if (pendingCardGO != null) Destroy(pendingCardGO);
+                success = true;
+                Debug.Log("<color=green>[ObjectSelect]</color> Card added to deck successfully.");
+                break;
+            }
+
+            if (hit.collider.CompareTag("Floor")) break; // Stop looking if we hit the table
+        }
+
+        if (!success) {
+            Debug.Log("<color=orange>[ObjectSelect]</color> Add to Deck cancelled: No Deck component found.");
+        }
+
+        MenuActionCompleted(); // This handles resetting the state to Idle
+    }
+    // --- MENU WRAPPERS ---
+    public void OnCardMenuAddToDeckPressed() {
+        if (selectedCardView == null) return;
+        pendingCard = selectedCardView.GetCardData();
+        pendingCardGO = selectedCardView.gameObject;
+        ClearSelectionAndMenus();
+        cancelDeckAddMenu.Show();
+        state = InputState.ChoosingDeckForCard;
+    }
+
+    public void OnCardMenuAddToHandPressed() {
+        if (selectedCardView == null || GameManager.Instance == null) return;
+        PlayerHand myHand = GameManager.Instance.MyHand;
+        if (myHand != null) {
+            // Remove from existing hand if any
+            PlayerHand[] allHands = FindObjectsByType<PlayerHand>(FindObjectsSortMode.None);
+            foreach (var hand in allHands) {
+                if (hand.cardsInHand.Contains(selectedCardView)) { hand.RemoveCard(selectedCardView); break; }
+            }
+            myHand.AddCard(selectedCardView);
+        }
+        MenuActionCompleted();
+    }
+
+    public void onCancelDeckAddPressed() => MenuActionCompleted();
+
+    public void MenuActionCompleted() {
+        pendingCard = null;
+        pendingCardGO = null;
+        ClearSelectionAndMenus();
+        state = InputState.Idle;
+    }
+
+    public void OnFocusOnHandButtonPressed() {
+        if (GameManager.Instance?.MyHand?.cameraAnchor != null) {
+            CameraController.Instance?.FocusOnTransform(GameManager.Instance.MyHand.cameraAnchor);
+        }
+    }
+
+    // --- DRAG & PHYSICS ---
     private void BeginDrag() {
         if (pressedCandidate == null) return;
         draggedRb = pressedCandidate.GetComponent<Rigidbody>();
@@ -173,101 +270,6 @@ public class ObjectSelect : MonoBehaviour {
         pressedCandidate = null;
     }
 
-    private void ConfirmClick() {
-        if (pressedCandidate == null) return;
-        SelectObject(pressedCandidate);
-    }
-
-    private void SelectObject(GameObject obj) {
-        if (obj == null || !obj.CompareTag("MoveableObject")) return;
-        ClearSelection();
-        if (highlight != null) highlight.Show(obj);
-        selectedDeck = obj.GetComponentInParent<Deck>();
-        selectedCardView = obj.GetComponentInParent<CardView>();
-        if (selectedDeck != null) deckMenu.Show(selectedDeck, PointerPosition());
-        else if (selectedCardView != null) cardMenu.Show(selectedCardView, PointerPosition());
-    }
-
-    public GameObject RaycastWorldObject() {
-        Ray ray = Camera.main.ScreenPointToRay(PointerPosition());
-        RaycastHit[] hits = Physics.RaycastAll(ray, 100f);
-        System.Array.Sort(hits, (x, y) => x.distance.CompareTo(y.distance));
-        foreach (var hit in hits) {
-            if (hit.collider.CompareTag("MoveableObject")) return hit.collider.gameObject;
-            if (hit.collider.CompareTag("Floor")) return null;
-        }
-        return null;
-    }
-
-    public bool IsPointerOverUI() {
-        if (EventSystem.current == null) return false;
-        PointerEventData eventData = new PointerEventData(EventSystem.current) { position = PointerPosition() };
-#if UNITY_ANDROID && !UNITY_EDITOR
-        if (Input.touchCount > 0) eventData.pointerId = Input.GetTouch(0).fingerId;
-        else return false;
-#endif
-        List<RaycastResult> results = new List<RaycastResult>();
-        EventSystem.current.RaycastAll(eventData, results);
-        foreach (var result in results) {
-            if (result.gameObject.layer == 5) return true;
-        }
-        return false;
-    }
-
-    // --- HELPER WRAPPERS ---
-    public void OnCardMenuAddToDeckPressed() {
-        if (selectedCardView == null) return;
-        pendingCard = selectedCardView.GetCardData();
-        pendingCardGO = selectedCardView.gameObject;
-        ClearSelectionAndMenus();
-        cancelDeckAddMenu.Show();
-        state = InputState.ChoosingDeckForCard;
-    }
-
-    public void OnCardMenuAddToHandPressed() {
-        if (selectedCardView == null || GameManager.Instance == null) return;
-        PlayerHand myHand = GameManager.Instance.MyHand;
-        if (myHand != null) {
-            PlayerHand[] allHands = FindObjectsByType<PlayerHand>(FindObjectsSortMode.None);
-            foreach (var hand in allHands) {
-                if (hand.cardsInHand.Contains(selectedCardView)) { hand.RemoveCard(selectedCardView); break; }
-            }
-            myHand.AddCard(selectedCardView);
-        }
-        MenuActionCompleted();
-    }
-
-    public void onCancelDeckAddPressed() => MenuActionCompleted();
-    public void MenuActionCompleted() {
-        pendingCard = null; pendingCardGO = null;
-        ClearSelectionAndMenus();
-        state = InputState.Idle;
-    }
-
-    private void HandleAddToDeckClick() {
-        GameObject hitObj = RaycastWorldObject();
-        if (hitObj != null) {
-            Deck deck = hitObj.GetComponentInParent<Deck>();
-            if (deck != null && pendingCard != null) {
-                deck.AddCard(pendingCard);
-                if (pendingCardGO != null) Destroy(pendingCardGO);
-            }
-        }
-        MenuActionCompleted();
-    }
-
-    public void OnFocusOnHandButtonPressed() {
-        if (GameManager.Instance?.MyHand?.cameraAnchor != null) {
-            CameraController.Instance?.FocusOnTransform(GameManager.Instance.MyHand.cameraAnchor);
-        }
-    }
-
-    public bool IsPointerOverDraggable() {
-        if (state == InputState.Dragging) return true;
-        GameObject hit = RaycastWorldObject();
-        return hit != null && hit.CompareTag("MoveableObject");
-    }
-
     private void CheckForHandDrop(GameObject obj) {
         CardView card = obj.GetComponent<CardView>();
         if (card == null) return;
@@ -296,19 +298,47 @@ public class ObjectSelect : MonoBehaviour {
         }
     }
 
-    private void ClearSelection() {
-        selectedDeck = null; selectedCardView = null;
+    // --- SELECTION & UI HELPERS ---
+    public void ClearSelectionAndMenus() {
+        selectedDeck = null;
+        selectedCardView = null;
         if (highlight != null) highlight.Hide();
+        HideAllMenus();
     }
 
-    private void ClearSelectionAndMenus() { ClearSelection(); HideAllMenus(); }
     private void HideAllMenus() {
         if (deckMenu) deckMenu.Hide();
         if (cardMenu) cardMenu.Hide();
         if (cancelDeckAddMenu) cancelDeckAddMenu.Hide();
     }
 
-    // Fixed Wrappers to prevent touch count errors
+    public GameObject RaycastWorldObject() {
+        Ray ray = Camera.main.ScreenPointToRay(PointerPosition());
+        RaycastHit[] hits = Physics.RaycastAll(ray, 100f);
+        System.Array.Sort(hits, (x, y) => x.distance.CompareTo(y.distance));
+        foreach (var hit in hits) {
+            if (hit.collider.CompareTag("MoveableObject")) return hit.collider.gameObject;
+            if (hit.collider.CompareTag("Floor")) return null;
+        }
+        return null;
+    }
+
+    public bool IsPointerOverUI() {
+        if (EventSystem.current == null) return false;
+        PointerEventData eventData = new PointerEventData(EventSystem.current) { position = PointerPosition() };
+#if UNITY_ANDROID && !UNITY_EDITOR
+        if (Input.touchCount > 0) eventData.pointerId = Input.GetTouch(0).fingerId;
+        else return false;
+#endif
+        List<RaycastResult> results = new List<RaycastResult>();
+        EventSystem.current.RaycastAll(eventData, results);
+        foreach (var result in results) {
+            if (result.gameObject.layer == 5) return true;
+        }
+        return false;
+    }
+
+    // --- TOUCH/MOUSE WRAPPERS ---
     Vector2 PointerPosition() {
 #if UNITY_ANDROID && !UNITY_EDITOR
         return Input.touchCount > 0 ? Input.GetTouch(0).position : Vector2.zero;
@@ -335,7 +365,6 @@ public class ObjectSelect : MonoBehaviour {
 
     bool PointerUp() {
 #if UNITY_ANDROID && !UNITY_EDITOR
-        // We check if count dropped to 0 OR if the first touch ended
         return Input.touchCount == 0 || Input.GetTouch(0).phase == TouchPhase.Ended || Input.GetTouch(0).phase == TouchPhase.Canceled;
 #else
         return Input.GetMouseButtonUp(0);

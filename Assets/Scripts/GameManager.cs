@@ -1,5 +1,6 @@
 using UnityEngine;
 using System.Collections.Generic;
+using Unity.Netcode;
 
 [System.Serializable]
 public class PlayerScoreData {
@@ -7,70 +8,97 @@ public class PlayerScoreData {
     public int score;
 }
 
-public class GameManager : MonoBehaviour {
+public class GameManager : NetworkBehaviour {
     public static GameManager Instance;
 
-    public List<PlayerScoreData> playerScores = new List<PlayerScoreData>();
-
-    // Call this whenever someone earns points
-    public void AddScore(int playerIndex, int amount) {
-        if (playerIndex >= 0 && playerIndex < playerScores.Count) {
-            playerScores[playerIndex].score += amount;
-        }
-    }
-
     [Header("Table Setup")]
-    // Drag your 8 Seat GameObjects here in order (Seat 1 to Seat 8)
     public List<PlayerHand> allSeats;
 
-    [Header("Session Data")]
-    public int totalPlayers = 4; // We assume this is known at load
-    public int myPlayerIndex = 0; // The index of the local user (0-7)
+    // Sync the active player count to all clients automatically
+    public NetworkVariable<int> netPlayerCount = new NetworkVariable<int>(0);
 
-    // Helper to get the local player's hand quickly
+    public List<PlayerScoreData> playerScores = new List<PlayerScoreData>();
+    public int totalPlayers = 4;
+    public int myPlayerIndex = -1;
+
+    public ulong MyClientId => NetworkManager.Singleton.LocalClientId;
+
     public PlayerHand MyHand {
         get {
-            if (myPlayerIndex >= 0 && myPlayerIndex < allSeats.Count) {
-                Debug.Log("got hand");
+            if (myPlayerIndex >= 0 && myPlayerIndex < allSeats.Count)
                 return allSeats[myPlayerIndex];
-            }
             return null;
         }
     }
 
     void Awake() {
-        // Singleton Setup
         if (Instance == null) Instance = this;
         else Destroy(gameObject);
     }
 
-    void Start() {
-        //Temp data for testing
-        playerScores.Add(new PlayerScoreData { playerName = "Local Player", score = 0 });
-        playerScores.Add(new PlayerScoreData { playerName = "Opponent 1", score = 150 });
-        //end temp data
-        AssignSeats();
+    public override void OnNetworkSpawn() {
+        if (IsServer) {
+            AssignSeats();
+        }
+
+        // Listen for the server changing the player count, and update visual seats
+        netPlayerCount.OnValueChanged += (oldVal, newVal) => UpdateSeatVisibility(newVal);
+        UpdateSeatVisibility(netPlayerCount.Value);
     }
 
-    // This assigns active players to seats. 
-    // For now, we just fill them sequentially (Player 0 -> Seat 0).
     public void AssignSeats() {
-        for (int i = 0; i < allSeats.Count; i++) {
-            // Check if this seat should be active based on player count
-            bool isSeatActive = i < totalPlayers;
+        if (!IsServer) return;
 
-            allSeats[i].gameObject.SetActive(isSeatActive);
+        int seatIndex = 0;
+        foreach (var client in NetworkManager.Singleton.ConnectedClientsList) {
+            if (seatIndex < allSeats.Count) {
+                PlayerHand seat = allSeats[seatIndex];
 
-            if (isSeatActive) {
-                // Determine if this is the "Local Player" (Me)
-                bool isMe = (i == myPlayerIndex);
-
-                // Optional: You can change the color of the seat or enable
-                // specific UI here to show "This is you"
-                if (isMe) {
-                    Debug.Log($"Player assigned to Seat {i}");
+                if (seat == null) {
+                    Debug.LogError($"<color=red>[GameManager]</color> Seat at index {seatIndex} is NULL! Check your 'allSeats' list in the Inspector.");
+                    continue;
                 }
+
+                seat.gameObject.SetActive(true);
+
+                NetworkObject seatNetObj = seat.GetComponent<NetworkObject>();
+
+                if (seatNetObj == null) {
+                    Debug.LogError($"<color=red>[GameManager]</color> Seat '{seat.gameObject.name}' is missing a NetworkObject component! Please add one in the Inspector.");
+                    continue; // Skip this broken seat so the rest of the game doesn't crash
+                }
+
+                // Assign ownership so the specific client can control their hand
+                if (!seatNetObj.IsSpawned) {
+                    seatNetObj.SpawnWithOwnership(client.ClientId);
+                } else {
+                    seatNetObj.ChangeOwnership(client.ClientId);
+                }
+
+                seatIndex++;
             }
+        }
+
+        // Deactivate unused seats
+        for (int i = seatIndex; i < allSeats.Count; i++) {
+            if (allSeats[i] != null) {
+                allSeats[i].gameObject.SetActive(false);
+            }
+        }
+
+        netPlayerCount.Value = seatIndex;
+        totalPlayers = seatIndex;
+    }
+
+    private void UpdateSeatVisibility(int count) {
+        for (int i = 0; i < allSeats.Count; i++) {
+            allSeats[i].gameObject.SetActive(i < count);
+        }
+    }
+
+    public void AddScore(int playerIndex, int amount) {
+        if (playerIndex >= 0 && playerIndex < playerScores.Count) {
+            playerScores[playerIndex].score += amount;
         }
     }
 }

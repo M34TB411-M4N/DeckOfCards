@@ -12,6 +12,7 @@ GameObject:
   - component: {fileID: 2969187907503334006}
   - component: {fileID: 8497375876407077905}
   - component: {fileID: 2335711006279177761}
+  - component: {fileID: 7870878507959523752}
   - component: {fileID: 7724686144200636237}
   - component: {fileID: -7393578911156863217}
   - component: {fileID: 4584279855422870240}
@@ -119,6 +120,31 @@ BoxCollider:
   serializedVersion: 3
   m_Size: {x: 1, y: 1, z: 1}
   m_Center: {x: 0, y: 0, z: 0}
+--- !u!114 &7870878507959523752
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2917818905663290176}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d5a57f767e5e46a458fc5d3c628d0cbb, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Unity.Netcode.Runtime::Unity.Netcode.NetworkObject
+  GlobalObjectIdHash: 4057512353
+  InScenePlacedSourceGlobalObjectIdHash: 0
+  DeferredDespawnTick: 0
+  Ownership: 1
+  AlwaysReplicateAsRoot: 0
+  SynchronizeTransform: 1
+  ActiveSceneSynchronization: 0
+  SceneMigrationSynchronization: 1
+  SpawnWithObservers: 1
+  DontDestroyWithOwner: 0
+  AutoObjectParentSync: 1
+  SyncOwnerTransformWhenParented: 1
+  AllowOwnerToParent: 0
 --- !u!114 &7724686144200636237
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -131,9 +157,13 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 30b147215ba02e7408d2049550620d82, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Deck
+  ShowTopMostFoldoutHeaderGroup: 1
+  netCardCount:
+    m_InternalValue: 0
   cards: []
   cardPrefab: {fileID: 9113979296879819522, guid: 01a4531c10517e84880ee7b21a5b39ca, type: 3}
   drawSpawnPoint: {fileID: 5373757290803548999, guid: 01a4531c10517e84880ee7b21a5b39ca, type: 3}
+  dealSpeed: 0.15
   cardCount: 0
 --- !u!54 &-7393578911156863217
 Rigidbody:
@@ -407,7 +437,7 @@ MonoBehaviour:
   m_PreserveMeshAssetOnDestroy: 0
   assetGuid: 
   m_Mesh: {fileID: 0}
-  m_VersionIndex: 25
+  m_VersionIndex: 28
   m_IsSelectable: 1
   m_SelectedFaces: 
   m_SelectedEdges: []

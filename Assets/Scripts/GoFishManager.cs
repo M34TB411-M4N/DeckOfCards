@@ -3,8 +3,9 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using TMPro;
+using Unity.Netcode;
 
-public class GoFishManager : MonoBehaviour {
+public class GoFishManager : NetworkBehaviour {
     public static GoFishManager Instance;
 
     [Header("Game Settings")]
@@ -27,47 +28,110 @@ public class GoFishManager : MonoBehaviour {
         if (Instance == null) Instance = this;
     }
 
-    void Start() {
-        // Apply settings from Lobby
-        GameManager.Instance.totalPlayers = GoFishSettings.PlayerCount;
-        StartCoroutine(SetupGameRoutine());
+    public override void OnNetworkSpawn() {
+        Debug.Log("<color=cyan>[GoFishManager]</color> OnNetworkSpawn triggered.");
+
+        if (IsServer) {
+            Debug.Log("<color=cyan>[GoFishManager]</color> I am the Server. Starting setup coroutine...");
+
+            if (mainDeck == null) {
+                Debug.LogError("<color=red>[GoFishManager]</color> FATAL: 'mainDeck' is not assigned in the Inspector!");
+            }
+            if (GameManager.Instance == null) {
+                Debug.LogError("<color=red>[GoFishManager]</color> FATAL: 'GameManager.Instance' is null!");
+            }
+
+            StartCoroutine(WaitForClientsAndSetup());
+        } else {
+            Debug.Log("<color=cyan>[GoFishManager]</color> I am a Client. Waiting for Host to deal.");
+            UpdateLog("Waiting for Host to deal...");
+        }
     }
 
-    IEnumerator SetupGameRoutine() {
-        yield return new WaitForSeconds(0.5f);
+    IEnumerator WaitForClientsAndSetup() {
+        Debug.Log("<color=cyan>[GoFishManager]</color> Waiting 1.5s for scene to settle...");
+        yield return new WaitForSeconds(1.5f);
 
-        // Re-call AssignSeats to ensure the right number of seats are active
+        Debug.Log("<color=cyan>[GoFishManager]</color> Calling GameManager.Instance.AssignSeats()...");
         GameManager.Instance.AssignSeats();
 
-        var allSeats = GameManager.Instance.allSeats;
+        yield return new WaitForSeconds(0.5f);
+
         activePlayers.Clear();
+        var allSeats = GameManager.Instance.allSeats;
+        Debug.Log($"<color=cyan>[GoFishManager]</color> Checking {allSeats.Count} total seats for active players...");
 
         for (int i = 0; i < allSeats.Count; i++) {
-            if (allSeats[i].gameObject.activeSelf) {
+            if (allSeats[i] != null && allSeats[i].gameObject.activeSelf) {
                 GoFishPlayer player = allSeats[i].GetComponent<GoFishPlayer>();
-                if (player == null) player = allSeats[i].gameObject.AddComponent<GoFishPlayer>();
+                if (player == null) {
+                    Debug.LogWarning($"<color=yellow>[GoFishManager]</color> Seat {i} missing GoFishPlayer component. Adding it now.");
+                    player = allSeats[i].gameObject.AddComponent<GoFishPlayer>();
+                }
 
                 player.seatIndex = i;
-                player.playerName = (i == GameManager.Instance.myPlayerIndex) ? "You" : $"Opponent {i}";
+                player.playerName = (i == 0) ? "Host" : $"Player {i + 1}";
                 activePlayers.Add(player);
+                Debug.Log($"<color=cyan>[GoFishManager]</color> Successfully added {player.playerName} at Seat {i}.");
             }
         }
 
+        Debug.Log($"<color=cyan>[GoFishManager]</color> Setup complete. Found {activePlayers.Count} active players.");
+
+        if (activePlayers.Count == 0) {
+            Debug.LogError("<color=red>[GoFishManager]</color> FATAL ERROR: activePlayers count is 0! Dealing aborted.");
+            yield break;
+        }
+
+        Debug.Log("<color=cyan>[GoFishManager]</color> Starting InitialDeal coroutine...");
         yield return StartCoroutine(InitialDeal());
+
         gameInProgress = true;
         StartTurn(0);
     }
 
     IEnumerator InitialDeal() {
-        UpdateLog("Dealing cards...");
+        UpdateLogServerAndClient("Dealing cards...");
+        Debug.Log($"<color=cyan>[GoFishManager]</color> Dealing {startingHandSize} cards to {activePlayers.Count} players.");
+
         for (int i = 0; i < startingHandSize; i++) {
             foreach (var player in activePlayers) {
                 PlayerHand visualHand = GameManager.Instance.allSeats[player.seatIndex];
-                Card drawnData = mainDeck.DrawCard(visualHand);
-                player.AddCard(drawnData);
-                yield return new WaitForSeconds(0.1f);
+
+                if (visualHand == null) {
+                    Debug.LogError($"<color=red>[GoFishManager]</color> visualHand for Player {player.seatIndex} is null!");
+                    continue;
+                }
+
+                Debug.Log($"<color=cyan>[GoFishManager]</color> Requesting ServerDrawCard for Player {player.seatIndex}...");
+                Card drawnData = mainDeck.ServerDrawCard(visualHand);
+
+                if (drawnData != null) {
+                    player.AddCard(drawnData);
+                    Debug.Log($"<color=green>[GoFishManager]</color> Player {player.seatIndex} successfully received {drawnData.rank} of {drawnData.suit}.");
+                } else {
+                    Debug.LogError($"<color=red>[GoFishManager]</color> ServerDrawCard returned null for Player {player.seatIndex}! Halting deal for this card.");
+                }
+
+                yield return new WaitForSeconds(0.15f);
             }
         }
+        UpdateLogServerAndClient("Game Started!");
+        Debug.Log("<color=cyan>[GoFishManager]</color> Initial deal finished.");
+    }
+
+    public void UpdateLog(string message) {
+        if (gameLogText != null) gameLogText.text = message;
+    }
+
+    private void UpdateLogServerAndClient(string message) {
+        UpdateLog(message);
+        UpdateLogClientRpc(message);
+    }
+
+    [ClientRpc]
+    private void UpdateLogClientRpc(string message) {
+        UpdateLog(message);
     }
 
     public void StartTurn(int playerIndex) {
@@ -92,7 +156,7 @@ public class GoFishManager : MonoBehaviour {
         List<GoFishPlayer> validTargets = activePlayers.Where(p => p != aiPlayer).ToList();
         GoFishPlayer target = validTargets[Random.Range(0, validTargets.Count)];
 
-        UpdateLog($"{aiPlayer.playerName}: 'Do you have any {randomRank}s, {target.playerName}?'");
+        UpdateLogServerAndClient($"{aiPlayer.playerName}: 'Do you have any {randomRank}s, {target.playerName}?'");
         yield return new WaitForSeconds(1.5f);
         ProcessRequestAI(aiPlayer, target, randomRank);
     }
@@ -138,11 +202,14 @@ public class GoFishManager : MonoBehaviour {
     IEnumerator GoFishRoutine(GoFishPlayer player, Rank requestedRank) {
         PlayerHand visualHand = GameManager.Instance.allSeats[player.seatIndex];
         if (mainDeck.cards.Count > 0) {
-            Card drawnCard = mainDeck.DrawCard(visualHand);
-            player.AddCard(drawnCard);
+            Card drawnCard = mainDeck.ServerDrawCard(visualHand);
+
+            if (drawnCard != null) {
+                player.AddCard(drawnCard);
+            }
             yield return new WaitForSeconds(1.0f);
 
-            if (drawnCard.rank == requestedRank) {
+            if (drawnCard != null && drawnCard.rank == requestedRank) {
                 CheckForBooks(player);
                 if (player.logicalHand.Count == 0) yield return StartCoroutine(RefillHandRoutine(player));
                 StartTurn(player.seatIndex);
@@ -165,7 +232,8 @@ public class GoFishManager : MonoBehaviour {
         PlayerHand visualHand = GameManager.Instance.allSeats[player.seatIndex];
         for (int i = 0; i < refillAmount; i++) {
             if (mainDeck.cards.Count > 0) {
-                player.AddCard(mainDeck.DrawCard(visualHand));
+                Card drawnCard = mainDeck.ServerDrawCard(visualHand);
+                if (drawnCard != null) player.AddCard(drawnCard);
                 yield return new WaitForSeconds(0.2f);
             }
         }
@@ -195,11 +263,7 @@ public class GoFishManager : MonoBehaviour {
 
     void EndGame() {
         gameInProgress = false;
-        UpdateLog("GAME OVER!");
-    }
-
-    public void UpdateLog(string message) {
-        if (gameLogText != null) gameLogText.text = message;
+        UpdateLogServerAndClient("GAME OVER!");
     }
 
     IEnumerator ShowTurnNotification(string pName) {
