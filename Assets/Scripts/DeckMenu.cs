@@ -12,9 +12,9 @@ public class DeckMenu : MonoBehaviour {
     void Awake() {
         Hide();
     }
+
     public bool GetActive() { return isActive; }
 
-    // Show a menu for a particular deck (keeps a reference for display, but actions go to controller)
     public void Show(Deck deck, Vector3 screenPosition) {
         isActive = true;
         currentDeck = deck;
@@ -30,21 +30,19 @@ public class DeckMenu : MonoBehaviour {
         currentDeck = null;
     }
 
-    // Button callback wired in inspector (Draw)
-    // The menu delegates the action to the controller (state machine)
     public void OnDrawCardPressed() {
         if (currentDeck == null) return;
 
-        // We pass the local player's hand as the target for the draw
         if (GameManager.Instance != null && GameManager.Instance.MyHand != null) {
-            currentDeck.DrawCard(GameManager.Instance.MyHand);
+            // Uses the new network-safe request
+            currentDeck.RequestDrawCard();
         } else {
             Debug.LogError("DeckMenu: Cannot draw because MyHand is null!");
         }
 
-        // Tell the controller we completed a UI action -> clear selection & menus
         if (controller != null) controller.MenuActionCompleted();
     }
+
     public void OnFlipPressed() {
         if (currentDeck == null) return;
         currentDeck.Flip();
@@ -54,38 +52,24 @@ public class DeckMenu : MonoBehaviour {
     public void OnDealButtonPressed() {
         if (currentDeck == null) return;
 
-        int count = 7; // Default
+        int count = 7;
         if (dealCountInput != null && int.TryParse(dealCountInput.text, out int result)) {
             count = result;
         }
 
-        // Make the simple call to the deck
         currentDeck.StartDealing(count);
-
-        // Notify the controller to close menus, following your pattern
-        controller.MenuActionCompleted();
+        if (controller != null) controller.MenuActionCompleted();
     }
 
     public void OnRemoveTopCardButtonPressed() {
         if (currentDeck == null) return;
-
-        // Call the logic on the deck itself
         currentDeck.RemoveTopCard();
-
-        // Close the menu and clear selection using your existing controller callback
-        if (controller != null) {
-            controller.MenuActionCompleted();
-        }
+        if (controller != null) controller.MenuActionCompleted();
     }
 
     public void OnShufflePressed() {
         if (currentDeck == null) return;
-
         currentDeck.Shuffle();
-
         if (controller != null) controller.MenuActionCompleted();
     }
-    //public void OnOtherButtonPressed() {
-    //    if (controller != null) controller.MenuActionCompleted();
-    //}
 }

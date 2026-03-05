@@ -1,7 +1,8 @@
-using UnityEngine;
 using System.Collections.Generic;
+using Unity.Netcode;
+using UnityEngine;
 
-public class PlayerHand : MonoBehaviour {
+public class PlayerHand : NetworkBehaviour {
     [Header("Layout Settings")]
     [SerializeField] private float cardWidth = 2.0f;       
     [SerializeField] private float padding = 0.1f;         
@@ -102,6 +103,14 @@ public class PlayerHand : MonoBehaviour {
             //Transform cardTransform = cardsInHand[i].transform;
             //cardTransform.position = Vector3.Lerp(cardTransform.position, targetPos, Time.deltaTime * transitionSpeed);
             //cardTransform.rotation = Quaternion.Slerp(cardTransform.rotation, finalRot, Time.deltaTime * transitionSpeed);
+        }
+    }
+
+    // This fires automatically when the Server assigns this seat to a Client
+    protected override void OnOwnershipChanged(ulong previousOwner, ulong newOwner) {
+        if (IsOwner && GameManager.Instance != null) {
+            GameManager.Instance.myPlayerIndex = GameManager.Instance.allSeats.IndexOf(this);
+            Debug.Log($"<color=green>[Network]</color> I am Local Player at Seat Index: {GameManager.Instance.myPlayerIndex}");
         }
     }
 }
