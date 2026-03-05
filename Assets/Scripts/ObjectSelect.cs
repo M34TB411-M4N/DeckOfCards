@@ -88,12 +88,9 @@ public class ObjectSelect : MonoBehaviour {
 
             if (IsPointerOverUI()) return;
 
-            // --- THE FIX ---
-            // Handle deck selection the moment the finger touches the screen. 
-            // This prevents the UI button's "PointerUp" from instantly canceling the action.
             if (state == InputState.ChoosingDeckForCard) {
                 HandleAddToDeckClick();
-                return; // Exit so we don't accidentally select a new object
+                return;
             }
 
             GameObject hit = RaycastWorldObject();
@@ -117,8 +114,6 @@ public class ObjectSelect : MonoBehaviour {
         }
 
         if (PointerUp()) {
-            // --- THE FIX PART 2 ---
-            // If we are in the middle of choosing a deck, ignore PointerUp completely.
             if (state == InputState.ChoosingDeckForCard) return;
 
             if (state == InputState.Dragging) {
@@ -132,6 +127,7 @@ public class ObjectSelect : MonoBehaviour {
             }
         }
     }
+
     // --- INTERACTION LOGIC ---
     private void ConfirmClick() {
         if (pressedCandidate == null) return;
@@ -168,15 +164,16 @@ public class ObjectSelect : MonoBehaviour {
                 break;
             }
 
-            if (hit.collider.CompareTag("Floor")) break; // Stop looking if we hit the table
+            if (hit.collider.CompareTag("Floor")) break;
         }
 
         if (!success) {
             Debug.Log("<color=orange>[ObjectSelect]</color> Add to Deck cancelled: No Deck component found.");
         }
 
-        MenuActionCompleted(); // This handles resetting the state to Idle
+        MenuActionCompleted();
     }
+
     // --- MENU WRAPPERS ---
     public void OnCardMenuAddToDeckPressed() {
         if (selectedCardView == null) return;
@@ -189,15 +186,13 @@ public class ObjectSelect : MonoBehaviour {
 
     public void OnCardMenuAddToHandPressed() {
         if (selectedCardView == null || GameManager.Instance == null) return;
+
         PlayerHand myHand = GameManager.Instance.MyHand;
         if (myHand != null) {
-            // Remove from existing hand if any
-            PlayerHand[] allHands = FindObjectsByType<PlayerHand>(FindObjectsSortMode.None);
-            foreach (var hand in allHands) {
-                if (hand.cardsInHand.Contains(selectedCardView)) { hand.RemoveCard(selectedCardView); break; }
-            }
-            myHand.AddCard(selectedCardView);
+            // Tell the network to manage the transfer officially!
+            GameManager.Instance.RequestAddCardToSpecificHand(selectedCardView, myHand);
         }
+
         MenuActionCompleted();
     }
 
@@ -211,9 +206,30 @@ public class ObjectSelect : MonoBehaviour {
     }
 
     public void OnFocusOnHandButtonPressed() {
-        if (GameManager.Instance?.MyHand?.cameraAnchor != null) {
-            CameraController.Instance?.FocusOnTransform(GameManager.Instance.MyHand.cameraAnchor);
+        if (GameManager.Instance == null) {
+            Debug.LogError("<color=red>[Camera]</color> Failed: GameManager is missing!");
+            return;
         }
+
+        PlayerHand myHand = GameManager.Instance.MyHand;
+
+        if (myHand == null) {
+            Debug.LogError("<color=red>[Camera]</color> Failed: MyHand is NULL. The Client does not know its seat yet.");
+            return;
+        }
+
+        if (myHand.cameraAnchor == null) {
+            Debug.LogError($"<color=red>[Camera]</color> Failed: cameraAnchor is missing on {myHand.gameObject.name}! Please assign the child empty in the Inspector.");
+            return;
+        }
+
+        if (CameraController.Instance == null) {
+            Debug.LogError("<color=red>[Camera]</color> Failed: CameraController.Instance is missing from the scene!");
+            return;
+        }
+
+        CameraController.Instance.FocusOnTransform(myHand.cameraAnchor);
+        Debug.Log($"<color=cyan>[Camera]</color> Successfully focused on {myHand.gameObject.name}");
     }
 
     // --- DRAG & PHYSICS ---
@@ -225,11 +241,9 @@ public class ObjectSelect : MonoBehaviour {
         state = InputState.Dragging;
 
         CardView card = pressedCandidate.GetComponent<CardView>();
-        if (card != null) {
-            PlayerHand[] allHands = FindObjectsByType<PlayerHand>(FindObjectsSortMode.None);
-            foreach (var hand in allHands) {
-                if (hand.cardsInHand.Contains(card)) { hand.RemoveCard(card); break; }
-            }
+        if (card != null && GameManager.Instance != null) {
+            // Tell network we picked it up out of a hand
+            GameManager.Instance.RequestRemoveCardFromHands(card);
         }
 
         hoverComponent = pressedCandidate.GetComponent<HoverWhileDragged>();
@@ -274,9 +288,14 @@ public class ObjectSelect : MonoBehaviour {
         CardView card = obj.GetComponent<CardView>();
         if (card == null) return;
         Collider[] hitColliders = Physics.OverlapSphere(obj.transform.position, handCheckRadius);
+
         foreach (var hit in hitColliders) {
             PlayerHand hand = hit.GetComponent<PlayerHand>();
-            if (hand != null) { hand.AddCard(card); break; }
+            if (hand != null && GameManager.Instance != null) {
+                // Tell network we dropped it into a hand
+                GameManager.Instance.RequestAddCardToSpecificHand(card, hand);
+                break;
+            }
         }
     }
 

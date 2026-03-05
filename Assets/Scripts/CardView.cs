@@ -40,7 +40,7 @@ public class CardView : MonoBehaviour {
         if (card == null) return;
 
         // Construct the string name based on the data to match your Resources folder files
-        string resourceName = $"Cards/{card.suit}_{card.rank}";
+        string resourceName = $"CardFaces/{card.suit}_{card.rank}";
 
         // Load the sprite from the Resources folder
         Sprite loadedFace = Resources.Load<Sprite>(resourceName);

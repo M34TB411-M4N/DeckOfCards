@@ -149,7 +149,7 @@ MonoBehaviour:
   rank: 0
   suit: 3
   faceRenderer: {fileID: 6334054994333043659}
-  pilePrefab: {fileID: 2917818905663290176, guid: 844e5ef90a8f01145999c0112a039154, type: 3}
+  pilePrefab: {fileID: 5785056385212413213, guid: 9f76154733990664da90fe717077a48f, type: 3}
 --- !u!65 &8216447896000086034
 BoxCollider:
   m_ObjectHideFlags: 0

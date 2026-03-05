@@ -28,27 +28,19 @@ public class Deck : NetworkBehaviour {
     public List<Card> GetCards() { return cards; }
 
     public override void OnNetworkSpawn() {
-        Debug.Log("<color=yellow>[Deck]</color> OnNetworkSpawn triggered.");
-
-        // Listen to updates from the server to resize and re-face the deck visually
         netCardCount.OnValueChanged += (oldVal, newVal) => UpdateDeckVisuals();
         netBottomSuit.OnValueChanged += (oldVal, newVal) => UpdateDeckVisuals();
         netBottomRank.OnValueChanged += (oldVal, newVal) => UpdateDeckVisuals();
 
         if (IsServer) {
             int targetDecks = GoFishSettings.DeckCount > 0 ? GoFishSettings.DeckCount : 1;
-            Debug.Log($"<color=yellow>[Deck]</color> Server spawning deck. Target deck multiplier: {targetDecks}");
             CreateStandardDeck(targetDecks);
             Shuffle();
-        } else {
-            Debug.Log("<color=yellow>[Deck]</color> Client spawned deck. Waiting for server sync.");
         }
 
         UpdateDeckVisuals();
     }
 
-    // --- SERVER STATE HELPER ---
-    // We call this anytime the list of cards changes on the server so clients update visually.
     private void UpdateServerDeckState() {
         if (!IsServer) return;
 
@@ -56,31 +48,25 @@ public class Deck : NetworkBehaviour {
         cardCount = cards.Count;
 
         if (cards.Count > 0) {
-            // The bottom card is the last one in the list (since index 0 is drawn first)
             Card bottomCard = cards[cards.Count - 1];
             netBottomSuit.Value = bottomCard.suit;
             netBottomRank.Value = bottomCard.rank;
         }
     }
 
-    // --- VISUAL THICKNESS & FACE LOGIC ---
     private void UpdateDeckVisuals() {
         if (deckMesh != null && faceRenderer != null) {
             if (netCardCount.Value <= 0) {
-                // Hide the deck if it's empty
                 deckMesh.gameObject.SetActive(false);
                 faceRenderer.gameObject.SetActive(false);
             } else {
                 deckMesh.gameObject.SetActive(true);
                 faceRenderer.gameObject.SetActive(true);
 
-                // Calculate thickness based on 52 cards being "maxDeckHeight"
                 float heightPercent = Mathf.Clamp01((float)netCardCount.Value / 52f);
-                float currentHeight = Mathf.Max(0.01f, maxDeckHeight * heightPercent); // Never go completely flat
-
+                float currentHeight = Mathf.Max(0.01f, maxDeckHeight * heightPercent);
                 deckMesh.localScale = new Vector3(deckMesh.localScale.x, currentHeight, deckMesh.localScale.z);
 
-                // Update the bottom face sprite
                 string resourceName = $"Cards/{netBottomSuit.Value}_{netBottomRank.Value}";
                 Sprite loadedFace = Resources.Load<Sprite>(resourceName);
                 if (loadedFace != null) {
@@ -95,7 +81,6 @@ public class Deck : NetworkBehaviour {
         cards.Clear();
         cards.AddRange(initialCards);
         UpdateServerDeckState();
-        Debug.Log($"<color=yellow>[Deck]</color> initialized manually with {cards.Count} cards.");
     }
 
     void CreateStandardDeck(int deckMultiplier) {
@@ -108,127 +93,86 @@ public class Deck : NetworkBehaviour {
             }
         }
         UpdateServerDeckState();
-        Debug.Log($"<color=yellow>[Deck]</color> Created deck with {cards.Count} cards.");
     }
 
     public void RequestDrawCard() {
-        if (GameManager.Instance.MyHand == null) {
-            Debug.LogError("<color=red>[Deck]</color> RequestDrawCard failed: GameManager.Instance.MyHand is null!");
-            return;
-        }
-        ulong mySeatId = GameManager.Instance.MyHand.GetComponent<NetworkObject>().NetworkObjectId;
-        Debug.Log($"<color=yellow>[Deck]</color> Client requesting card for seat ID {mySeatId}.");
-        DrawCardServerRpc(mySeatId);
+        if (GameManager.Instance.MyHand == null) return;
+
+        int seatIndex = GameManager.Instance.allSeats.IndexOf(GameManager.Instance.MyHand);
+        DrawCardServerRpc(seatIndex);
     }
 
     [ServerRpc(RequireOwnership = false)]
-    private void DrawCardServerRpc(ulong targetSeatNetworkId, ServerRpcParams rpcParams = default) {
-        if (cards.Count == 0) {
-            Debug.LogWarning("<color=yellow>[Deck]</color> DrawCardServerRpc aborted: Deck is empty.");
-            return;
-        }
+    private void DrawCardServerRpc(int targetSeatIndex, ServerRpcParams rpcParams = default) {
+        if (cards.Count == 0) return;
 
         Card topCardData = cards[0];
         cards.RemoveAt(0);
         UpdateServerDeckState();
 
-        if (cardPrefab == null || drawSpawnPoint == null) {
-            Debug.LogError("<color=red>[Deck]</color> DrawCardServerRpc failed: cardPrefab or drawSpawnPoint is null!");
-            return;
-        }
-
         GameObject newCardObj = Instantiate(cardPrefab, drawSpawnPoint.position, Quaternion.identity);
         NetworkObject netObj = newCardObj.GetComponent<NetworkObject>();
 
-        if (netObj == null) {
-            Debug.LogError("<color=red>[Deck]</color> DrawCardServerRpc failed: instantiated card missing NetworkObject!");
-            return;
-        }
-
         netObj.SpawnWithOwnership(rpcParams.Receive.SenderClientId);
-        SetCardDataClientRpc(netObj.NetworkObjectId, topCardData.suit, topCardData.rank, targetSeatNetworkId);
+
+        // Pass the raw ulong ID, it is physically impossible for this to fail serialization
+        SetCardDataClientRpc(netObj.NetworkObjectId, topCardData.suit, topCardData.rank, targetSeatIndex);
     }
 
     public Card ServerDrawCard(PlayerHand targetHand) {
-        Debug.Log("<color=yellow>[Deck]</color> ServerDrawCard called.");
-        if (!IsServer) {
-            Debug.LogError("<color=red>[Deck]</color> ServerDrawCard failed: Called by a Client!");
-            return null;
-        }
-
-        if (cards.Count == 0) {
-            Debug.LogWarning("<color=red>[Deck]</color> ServerDrawCard failed: Deck is empty!");
-            return null;
-        }
-
-        if (targetHand == null) {
-            Debug.LogError("<color=red>[Deck]</color> ServerDrawCard failed: targetHand is null!");
-            return null;
-        }
-
-        if (cardPrefab == null || drawSpawnPoint == null) {
-            Debug.LogError("<color=red>[Deck]</color> ServerDrawCard failed: Prefab or SpawnPoint missing!");
-            return null;
-        }
+        if (!IsServer || cards.Count == 0 || targetHand == null) return null;
 
         Card topCardData = cards[0];
         cards.RemoveAt(0);
         UpdateServerDeckState();
 
-        Debug.Log("<color=yellow>[Deck]</color> Instantiating card prefab...");
         GameObject newCardObj = Instantiate(cardPrefab, drawSpawnPoint.position, Quaternion.identity);
         NetworkObject netObj = newCardObj.GetComponent<NetworkObject>();
-
-        if (netObj == null) {
-            Debug.LogError("<color=red>[Deck]</color> ServerDrawCard failed: Card Prefab is missing a NetworkObject component!");
-            return null;
-        }
-
         NetworkObject handNetObj = targetHand.GetComponent<NetworkObject>();
-        if (handNetObj == null) {
-            Debug.LogError("<color=red>[Deck]</color> ServerDrawCard failed: targetHand is missing a NetworkObject!");
-            return null;
-        }
 
-        Debug.Log($"<color=yellow>[Deck]</color> Spawning card with ownership for client {handNetObj.OwnerClientId}...");
+        netObj.SpawnWithOwnership(handNetObj.OwnerClientId);
 
-        try {
-            netObj.SpawnWithOwnership(handNetObj.OwnerClientId);
-        } catch (System.Exception e) {
-            Debug.LogError($"<color=red>[Deck]</color> ServerDrawCard Exception during SpawnWithOwnership: {e.Message}");
-            return null;
-        }
-
-        Debug.Log("<color=yellow>[Deck]</color> Card spawned successfully. Sending ClientRpc to update visuals.");
-        SetCardDataClientRpc(netObj.NetworkObjectId, topCardData.suit, topCardData.rank, handNetObj.NetworkObjectId);
+        int seatIndex = GameManager.Instance.allSeats.IndexOf(targetHand);
+        SetCardDataClientRpc(netObj.NetworkObjectId, topCardData.suit, topCardData.rank, seatIndex);
 
         return topCardData;
     }
 
     [ClientRpc]
-    private void SetCardDataClientRpc(ulong cardNetworkId, Suit suit, Rank rank, ulong targetSeatNetworkId) {
-        Debug.Log($"<color=yellow>[Deck]</color> SetCardDataClientRpc received for Card NetID {cardNetworkId}.");
-        if (NetworkManager.Singleton.SpawnManager.SpawnedObjects.TryGetValue(cardNetworkId, out NetworkObject cardNetObj)) {
+    private void SetCardDataClientRpc(ulong cardNetworkId, Suit suit, Rank rank, int targetSeatIndex) {
+        StartCoroutine(WaitAndAssignCard(cardNetworkId, suit, rank, targetSeatIndex));
+    }
+
+    private IEnumerator WaitAndAssignCard(ulong cardNetworkId, Suit suit, Rank rank, int targetSeatIndex) {
+        NetworkObject cardNetObj = null;
+        float timeout = 3.0f; // Give the client 3 seconds to receive the spawn packet
+
+        while (timeout > 0) {
+            // Check the SpawnManager directly using the raw ulong ID
+            if (NetworkManager.Singleton.SpawnManager.SpawnedObjects.TryGetValue(cardNetworkId, out cardNetObj)) {
+                break;
+            }
+            timeout -= Time.deltaTime;
+            yield return null;
+        }
+
+        if (cardNetObj != null) {
             CardView newCardView = cardNetObj.GetComponent<CardView>();
             if (newCardView != null) {
                 newCardView.SetCardData(new Card(suit, rank));
                 cardNetObj.gameObject.tag = "MoveableObject";
-            } else {
-                Debug.LogError("<color=red>[Deck]</color> SetCardDataClientRpc: CardView component missing on spawned card!");
             }
 
-            if (NetworkManager.Singleton.SpawnManager.SpawnedObjects.TryGetValue(targetSeatNetworkId, out NetworkObject seatNetObj)) {
-                PlayerHand targetHand = seatNetObj.GetComponent<PlayerHand>();
+            if (targetSeatIndex >= 0 && targetSeatIndex < GameManager.Instance.allSeats.Count) {
+                PlayerHand targetHand = GameManager.Instance.allSeats[targetSeatIndex];
                 if (targetHand != null) {
+                    // FORCE the hand to be active so its Update() loop runs to slide the card!
+                    targetHand.gameObject.SetActive(true);
                     targetHand.AddCard(newCardView);
-                } else {
-                    Debug.LogError("<color=red>[Deck]</color> SetCardDataClientRpc: PlayerHand missing on seat object!");
                 }
-            } else {
-                Debug.LogError($"<color=red>[Deck]</color> SetCardDataClientRpc: Could not find seat with NetID {targetSeatNetworkId}!");
             }
         } else {
-            Debug.LogError($"<color=red>[Deck]</color> SetCardDataClientRpc: Could not find spawned card with NetID {cardNetworkId}!");
+            Debug.LogError($"<color=red>[Deck]</color> ClientRpc timed out! Card {cardNetworkId} never spawned on Client.");
         }
     }
 
@@ -244,7 +188,6 @@ public class Deck : NetworkBehaviour {
             (cards[i], cards[rand]) = (cards[rand], cards[i]);
         }
         UpdateServerDeckState();
-        Debug.Log("<color=yellow>[Deck]</color> Deck shuffled.");
     }
 
     public void Flip() { FlipServerRpc(); }
@@ -294,7 +237,22 @@ public class Deck : NetworkBehaviour {
 
     [ClientRpc]
     private void SetTopCardDataClientRpc(ulong cardNetworkId, Suit suit, Rank rank) {
-        if (NetworkManager.Singleton.SpawnManager.SpawnedObjects.TryGetValue(cardNetworkId, out NetworkObject cardNetObj)) {
+        StartCoroutine(WaitAndAssignTopCard(cardNetworkId, suit, rank));
+    }
+
+    private IEnumerator WaitAndAssignTopCard(ulong cardNetworkId, Suit suit, Rank rank) {
+        NetworkObject cardNetObj = null;
+        float timeout = 3.0f;
+
+        while (timeout > 0) {
+            if (NetworkManager.Singleton.SpawnManager.SpawnedObjects.TryGetValue(cardNetworkId, out cardNetObj)) {
+                break;
+            }
+            timeout -= Time.deltaTime;
+            yield return null;
+        }
+
+        if (cardNetObj != null) {
             CardView cv = cardNetObj.GetComponent<CardView>();
             if (cv != null) cv.SetCardData(new Card(suit, rank));
 

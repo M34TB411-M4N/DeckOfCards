@@ -14,19 +14,42 @@ public class GameManager : NetworkBehaviour {
     [Header("Table Setup")]
     public List<PlayerHand> allSeats;
 
-    // Sync the active player count to all clients automatically
     public NetworkVariable<int> netPlayerCount = new NetworkVariable<int>(0);
 
     public List<PlayerScoreData> playerScores = new List<PlayerScoreData>();
     public int totalPlayers = 4;
     public int myPlayerIndex = -1;
 
-    public ulong MyClientId => NetworkManager.Singleton.LocalClientId;
+    public ulong MyClientId {
+        get {
+            if (NetworkManager.Singleton != null) return NetworkManager.Singleton.LocalClientId;
+            return 0;
+        }
+    }
 
     public PlayerHand MyHand {
         get {
-            if (myPlayerIndex >= 0 && myPlayerIndex < allSeats.Count)
+            if (myPlayerIndex >= 0 && myPlayerIndex < allSeats.Count) {
                 return allSeats[myPlayerIndex];
+            }
+
+            // Fail-safe 1: Check ownership locally
+            for (int i = 0; i < allSeats.Count; i++) {
+                if (allSeats[i] != null) {
+                    NetworkObject netObj = allSeats[i].GetComponent<NetworkObject>();
+                    if (netObj != null && netObj.IsSpawned && netObj.OwnerClientId == MyClientId) {
+                        myPlayerIndex = i;
+                        return allSeats[i];
+                    }
+                }
+            }
+
+            // Fail-safe 2: If we still don't know, actively ask the Server to resend the data
+            if (!IsServer && myPlayerIndex == -1) {
+                Debug.LogWarning("<color=orange>[GameManager]</color> Seat unknown. Requesting assignment from Server...");
+                RequestSeatAssignmentServerRpc();
+            }
+
             return null;
         }
     }
@@ -41,7 +64,6 @@ public class GameManager : NetworkBehaviour {
             AssignSeats();
         }
 
-        // Listen for the server changing the player count, and update visual seats
         netPlayerCount.OnValueChanged += (oldVal, newVal) => UpdateSeatVisibility(newVal);
         UpdateSeatVisibility(netPlayerCount.Value);
     }
@@ -49,56 +71,154 @@ public class GameManager : NetworkBehaviour {
     public void AssignSeats() {
         if (!IsServer) return;
 
-        int seatIndex = 0;
+        int seatIndex = 1;
+
+        if (allSeats.Count > 0 && allSeats[0] != null) {
+            allSeats[0].gameObject.SetActive(true);
+            myPlayerIndex = 0;
+
+            NetworkObject hostSeatNet = allSeats[0].GetComponent<NetworkObject>();
+            ulong serverId = NetworkManager.ServerClientId;
+
+            if (hostSeatNet.IsSpawned) {
+                if (hostSeatNet.OwnerClientId != serverId) hostSeatNet.ChangeOwnership(serverId);
+            } else {
+                try { hostSeatNet.SpawnWithOwnership(serverId); } catch { }
+            }
+        }
+
         foreach (var client in NetworkManager.Singleton.ConnectedClientsList) {
+            if (client.ClientId == NetworkManager.ServerClientId) continue;
+
             if (seatIndex < allSeats.Count) {
                 PlayerHand seat = allSeats[seatIndex];
+                if (seat != null) {
+                    seat.gameObject.SetActive(true);
+                    NetworkObject seatNetObj = seat.GetComponent<NetworkObject>();
 
-                if (seat == null) {
-                    Debug.LogError($"<color=red>[GameManager]</color> Seat at index {seatIndex} is NULL! Check your 'allSeats' list in the Inspector.");
-                    continue;
+                    if (seatNetObj.IsSpawned) {
+                        if (seatNetObj.OwnerClientId != client.ClientId) seatNetObj.ChangeOwnership(client.ClientId);
+                    } else {
+                        try { seatNetObj.SpawnWithOwnership(client.ClientId); } catch { }
+                    }
+
+                    ClientRpcParams rpcParams = new ClientRpcParams {
+                        Send = new ClientRpcSendParams { TargetClientIds = new ulong[] { client.ClientId } }
+                    };
+                    SetPlayerIndexClientRpc(seatIndex, rpcParams);
                 }
-
-                seat.gameObject.SetActive(true);
-
-                NetworkObject seatNetObj = seat.GetComponent<NetworkObject>();
-
-                if (seatNetObj == null) {
-                    Debug.LogError($"<color=red>[GameManager]</color> Seat '{seat.gameObject.name}' is missing a NetworkObject component! Please add one in the Inspector.");
-                    continue; // Skip this broken seat so the rest of the game doesn't crash
-                }
-
-                // Assign ownership so the specific client can control their hand
-                if (!seatNetObj.IsSpawned) {
-                    seatNetObj.SpawnWithOwnership(client.ClientId);
-                } else {
-                    seatNetObj.ChangeOwnership(client.ClientId);
-                }
-
                 seatIndex++;
             }
         }
 
-        // Deactivate unused seats
         for (int i = seatIndex; i < allSeats.Count; i++) {
-            if (allSeats[i] != null) {
-                allSeats[i].gameObject.SetActive(false);
-            }
+            if (allSeats[i] != null) allSeats[i].gameObject.SetActive(false);
         }
 
         netPlayerCount.Value = seatIndex;
         totalPlayers = seatIndex;
     }
 
+    [ServerRpc(RequireOwnership = false)]
+    private void RequestSeatAssignmentServerRpc(ServerRpcParams rpcParams = default) {
+        ulong senderId = rpcParams.Receive.SenderClientId;
+        for (int i = 0; i < allSeats.Count; i++) {
+            if (allSeats[i] != null) {
+                NetworkObject netObj = allSeats[i].GetComponent<NetworkObject>();
+                if (netObj != null && netObj.OwnerClientId == senderId) {
+                    ClientRpcParams cParams = new ClientRpcParams {
+                        Send = new ClientRpcSendParams { TargetClientIds = new ulong[] { senderId } }
+                    };
+                    SetPlayerIndexClientRpc(i, cParams);
+                    return;
+                }
+            }
+        }
+    }
+
+    [ClientRpc]
+    private void SetPlayerIndexClientRpc(int assignedIndex, ClientRpcParams rpcParams = default) {
+        myPlayerIndex = assignedIndex;
+        Debug.Log($"<color=green>[GameManager]</color> Received explicit seat assignment: {assignedIndex}");
+    }
+
     private void UpdateSeatVisibility(int count) {
         for (int i = 0; i < allSeats.Count; i++) {
-            allSeats[i].gameObject.SetActive(i < count);
+            if (allSeats[i] != null) {
+                allSeats[i].gameObject.SetActive(i < count);
+            }
         }
     }
 
     public void AddScore(int playerIndex, int amount) {
         if (playerIndex >= 0 && playerIndex < playerScores.Count) {
             playerScores[playerIndex].score += amount;
+        }
+    }
+
+    public void RequestAddCardToSpecificHand(CardView card, PlayerHand targetHand) {
+        if (card == null || targetHand == null) return;
+        NetworkObject cardNetObj = card.GetComponent<NetworkObject>();
+        int seatIndex = allSeats.IndexOf(targetHand);
+
+        if (cardNetObj != null && seatIndex >= 0) {
+            AddCardToHandServerRpc(cardNetObj.NetworkObjectId, seatIndex);
+        }
+    }
+
+    [ServerRpc(RequireOwnership = false)]
+    private void AddCardToHandServerRpc(ulong cardNetId, int seatIndex) {
+        if (NetworkManager.Singleton.SpawnManager.SpawnedObjects.TryGetValue(cardNetId, out NetworkObject cardNetObj)) {
+            ulong newOwner = allSeats[seatIndex].GetComponent<NetworkObject>().OwnerClientId;
+            if (cardNetObj.OwnerClientId != newOwner) {
+                cardNetObj.ChangeOwnership(newOwner);
+            }
+            AddCardToHandClientRpc(cardNetId, seatIndex);
+        }
+    }
+
+    [ClientRpc]
+    private void AddCardToHandClientRpc(ulong cardNetId, int seatIndex) {
+        if (NetworkManager.Singleton.SpawnManager.SpawnedObjects.TryGetValue(cardNetId, out NetworkObject cardNetObj)) {
+            CardView cv = cardNetObj.GetComponent<CardView>();
+            if (cv == null) return;
+
+            foreach (var h in allSeats) {
+                if (h != null && h.cardsInHand.Contains(cv)) h.RemoveCard(cv);
+            }
+
+            if (seatIndex >= 0 && seatIndex < allSeats.Count) {
+                PlayerHand hand = allSeats[seatIndex];
+                if (hand != null) {
+                    hand.gameObject.SetActive(true);
+                    hand.AddCard(cv);
+                }
+            }
+        }
+    }
+
+    public void RequestRemoveCardFromHands(CardView card) {
+        if (card == null) return;
+        NetworkObject cardNetObj = card.GetComponent<NetworkObject>();
+        if (cardNetObj != null) {
+            RemoveCardFromHandsServerRpc(cardNetObj.NetworkObjectId);
+        }
+    }
+
+    [ServerRpc(RequireOwnership = false)]
+    private void RemoveCardFromHandsServerRpc(ulong cardNetId) {
+        RemoveCardFromHandsClientRpc(cardNetId);
+    }
+
+    [ClientRpc]
+    private void RemoveCardFromHandsClientRpc(ulong cardNetId) {
+        if (NetworkManager.Singleton.SpawnManager.SpawnedObjects.TryGetValue(cardNetId, out NetworkObject cardNetObj)) {
+            CardView cv = cardNetObj.GetComponent<CardView>();
+            if (cv == null) return;
+
+            foreach (var h in allSeats) {
+                if (h != null && h.cardsInHand.Contains(cv)) h.RemoveCard(cv);
+            }
         }
     }
 }

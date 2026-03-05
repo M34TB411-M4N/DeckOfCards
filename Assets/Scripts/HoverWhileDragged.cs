@@ -85,12 +85,16 @@ public class HoverWhileDragged : MonoBehaviour {
 
         hovering = true;
 
-        // Capture saved state exactly once per hover.
         if (!savedStateCaptured) {
             savedUseGravity = rb.useGravity;
             savedConstraints = rb.constraints;
             savedStateCaptured = true;
         }
+
+        // --- THE FLAT SNAP FIX ---
+        // Snap the card to lie perfectly flat and kill any existing spin before we freeze it
+        rb.rotation = Quaternion.Euler(0f, 0f, 0f);
+        rb.angularVelocity = Vector3.zero;
 
         // Disable gravity and freeze Y + rotation while hovered so solver cannot touch Y
         rb.useGravity = false;
@@ -128,12 +132,6 @@ public class HoverWhileDragged : MonoBehaviour {
         rb.linearVelocity = v;
     }
 
-    /// <summary>
-    /// Robust detection of highest surface beneath the object's footprint.
-    /// Uses OverlapBox to find any colliders under the footprint first (best for partial overlap).
-    /// If none are found, performs a downward Raycast from the object's center to find table or distant surfaces.
-    /// Only updates cachedTargetY when a real surface is found (prevents spurious fallback to table).
-    /// </summary>
     private void RecomputeHoverTarget() {
         Bounds b = col.bounds;
 
@@ -195,15 +193,8 @@ public class HoverWhileDragged : MonoBehaviour {
             lastSurfaceCollider = rc;
             return;
         }
-
-        // No surface found beneath us — do NOT snap to table blindly.
-        // Keep existing cachedTargetY (so object doesn't suddenly drop to table).
-        // Optionally, you could slowly move down over time if you want a fallback behavior:
-        // cachedTargetY = Mathf.Max(cachedTargetY - 0.05f, someMinY);
-        // For now: do nothing (prevents spurious drops).
     }
 
-    // Debug: visualize the overlap/box cast volume in the editor
     void OnDrawGizmosSelected() {
         if (col == null)
             return;
