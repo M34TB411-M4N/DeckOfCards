@@ -15,20 +15,17 @@ public class GoFishRankSelector : MonoBehaviour {
     }
 
     private void RefreshButtons() {
-        // 1. Clear existing buttons
         foreach (Transform child in gridContainer) {
             Destroy(child.gameObject);
         }
 
-        // 2. Get local player's logic to see what ranks they currently hold
-        // This is a standard rule: You can only ask for what you have.
         GoFishPlayer localGoFishData = GameManager.Instance.MyHand.GetComponent<GoFishPlayer>();
 
-        // 3. Create a button for every Rank in the Enum
         foreach (Rank r in Enum.GetValues(typeof(Rank))) {
             GameObject btnObj = Instantiate(buttonPrefab, gridContainer);
             RankButton btnScript = btnObj.GetComponent<RankButton>();
 
+            // You can only ask for a rank if you already have one in your hand
             bool hasRank = localGoFishData != null && localGoFishData.HasRank(r);
             btnScript.Setup(r, this, hasRank);
         }
@@ -36,7 +33,8 @@ public class GoFishRankSelector : MonoBehaviour {
 
     public void OnRankSelected(Rank selectedRank) {
         if (GoFishManager.Instance != null) {
-            GoFishManager.Instance.ProcessRequest(targetSeatIndex, selectedRank);
+            // Send the request to the Server!
+            GoFishManager.Instance.SubmitRequestServerRpc(GameManager.Instance.myPlayerIndex, targetSeatIndex, selectedRank);
         }
         gameObject.SetActive(false);
     }

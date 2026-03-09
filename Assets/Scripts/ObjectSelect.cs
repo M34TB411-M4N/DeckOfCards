@@ -135,6 +135,10 @@ public class ObjectSelect : MonoBehaviour {
     }
 
     private void SelectObject(GameObject obj) {
+        // 1. The Killswitch: If Go Fish is active, completely ignore sandbox interactions
+        if (GoFishManager.Instance != null) return;
+
+        // 2. Standard Sandbox Logic
         if (obj == null || !obj.CompareTag("MoveableObject")) return;
 
         ClearSelectionAndMenus();

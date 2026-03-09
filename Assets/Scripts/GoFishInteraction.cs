@@ -1,37 +1,48 @@
 using UnityEngine;
+using UnityEngine.EventSystems; // Required for UI checking
 
 public class GoFishInteraction : MonoBehaviour {
     [Header("UI References")]
-    public GameObject rankSelectionPanel; // Assign a UI Panel prefab here
-    public GoFishRankSelector rankSelectorUI; // Script on that panel
+    public GameObject rankSelectionPanel;
+    public GoFishRankSelector rankSelectorUI;
 
     void Update() {
-        // Only allow interaction if it is MY turn
-        if (GoFishManager.Instance.currentPlayerTurnIndex != GameManager.Instance.myPlayerIndex) return;
+        if (GoFishManager.Instance == null || GameManager.Instance == null) return;
+
+        // Only allow interaction if it's my turn
+        if (GoFishManager.Instance.netCurrentTurn.Value != GameManager.Instance.myPlayerIndex) return;
+
+        // CRITICAL FIX: Prevent raycasting if the mouse is hovering over a UI element (like the menu)
+        if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject()) return;
 
         if (Input.GetMouseButtonDown(0)) {
             Ray ray = Camera.main.ScreenPointToRay(Input.mousePosition);
+
             if (Physics.Raycast(ray, out RaycastHit hit)) {
-                // Check if we clicked a Player Hand (or the area representing them)
+                Debug.Log($"<color=cyan>[GoFishInteraction]</color> Raycast hit: {hit.collider.gameObject.name}");
+
+                // Try to find the PlayerHand on the object we hit, or its parents
                 PlayerHand clickedHand = hit.collider.GetComponentInParent<PlayerHand>();
 
                 if (clickedHand != null) {
-                    // Check if we clicked OURSELVES (invalid in Go Fish)
-                    if (clickedHand == GameManager.Instance.MyHand) return;
+                    if (clickedHand == GameManager.Instance.MyHand) {
+                        Debug.Log("<color=yellow>[GoFishInteraction]</color> You clicked your own hand! You must click an opponent.");
+                        return;
+                    }
 
-                    // Open the UI to ask this player
+                    Debug.Log($"<color=green>[GoFishInteraction]</color> Valid target found! Opening menu for Seat {clickedHand.GetComponent<GoFishPlayer>().seatIndex}");
                     OpenAskUI(clickedHand);
+                } else {
+                    Debug.LogWarning("<color=red>[GoFishInteraction]</color> The object you clicked does not have a PlayerHand script on it or its parents.");
                 }
             }
         }
     }
 
     public void OpenAskUI(PlayerHand targetHand) {
-        // 1. Find the GoFishPlayer component on that seat to get their index
         GoFishPlayer targetData = targetHand.GetComponent<GoFishPlayer>();
 
         if (targetData != null && rankSelectorUI != null) {
-            // 2. Open the rank selector and tell it which player we are targeting
             rankSelectorUI.Open(targetData.seatIndex);
         }
     }

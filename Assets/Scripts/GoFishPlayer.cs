@@ -4,27 +4,30 @@ using System.Collections.Generic;
 public class GoFishPlayer : MonoBehaviour {
     public int seatIndex;
     public string playerName;
+    private PlayerHand myHand;
 
-    // The logical data of what cards this player owns
-    public List<Card> logicalHand = new List<Card>();
-
-    public void AddCard(Card card) {
-        logicalHand.Add(card);
+    void Awake() {
+        myHand = GetComponent<PlayerHand>();
     }
 
-    public void RemoveCard(Card card) {
-        // Find a card with matching Suit and Rank to remove from the logical list
-        Card target = logicalHand.Find(c => c.suit == card.suit && c.rank == card.rank);
-        if (target != null) {
-            logicalHand.Remove(target);
+    // Dynamically reads the physical cards currently in the PlayerHand
+    public List<Card> GetLogicalHand() {
+        List<Card> cards = new List<Card>();
+        if (myHand == null) return cards;
+
+        foreach (var cv in myHand.cardsInHand) {
+            if (cv != null && cv.GetCardData() != null) {
+                cards.Add(cv.GetCardData());
+            }
         }
+        return cards;
     }
 
     public bool HasRank(Rank rank) {
-        return logicalHand.Exists(c => c.rank == rank);
+        return GetLogicalHand().Exists(c => c.rank == rank);
     }
 
     public List<Card> GetCardsOfRank(Rank rank) {
-        return logicalHand.FindAll(c => c.rank == rank);
+        return GetLogicalHand().FindAll(c => c.rank == rank);
     }
 }
