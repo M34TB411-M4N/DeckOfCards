@@ -24,17 +24,15 @@ public class GoFishManager : NetworkBehaviour {
 
     private List<GoFishPlayer> activePlayers = new List<GoFishPlayer>();
     private Coroutine reminderCoroutine;
+    private Coroutine bannerCoroutine;
 
     void Awake() {
         if (Instance == null) Instance = this;
     }
 
     public override void OnNetworkSpawn() {
-        if (IsServer) {
-            StartCoroutine(WaitForClientsAndSetup());
-        } else {
-            UpdateLog("Waiting for Host to deal...");
-        }
+        if (IsServer) StartCoroutine(WaitForClientsAndSetup());
+        else UpdateLog("Waiting for Host to deal...");
     }
 
     IEnumerator WaitForClientsAndSetup() {
@@ -58,11 +56,11 @@ public class GoFishManager : NetworkBehaviour {
 
         if (activePlayers.Count == 0) yield break;
 
+        Debug.Log($"<color=cyan>[GoFishManager]</color> Game Started with Settings -> Players: {GoFishSettings.PlayerCount}, Decks: {GoFishSettings.DeckCount}, Mode: {GoFishSettings.CurrentMode}, Match Size: {GoFishSettings.GetMatchCount()}");
+
         yield return StartCoroutine(InitialDeal());
 
         gameInProgress = true;
-
-        // Randomize the starting player
         int randomStart = Random.Range(0, activePlayers.Count);
         StartTurnServer(activePlayers[randomStart].seatIndex);
     }
@@ -72,85 +70,104 @@ public class GoFishManager : NetworkBehaviour {
         for (int i = 0; i < startingHandSize; i++) {
             foreach (var player in activePlayers) {
                 PlayerHand visualHand = GameManager.Instance.allSeats[player.seatIndex];
-                if (visualHand != null) {
-                    mainDeck.ServerDrawCard(visualHand);
-                }
+                if (visualHand != null) mainDeck.ServerDrawCard(visualHand);
                 yield return new WaitForSeconds(0.15f);
             }
         }
+
+        yield return new WaitForSeconds(1.0f);
+        foreach (var player in activePlayers) CheckForBooksServer(player);
+
         UpdateLogServerAndClient("Game Started!");
+        FullStateSync();
     }
 
-    // --- TURN LOGIC (SERVER ONLY) ---
     private void StartTurnServer(int playerSeatIndex) {
-        if (!IsServer) return;
+        if (!IsServer || !gameInProgress) return;
+
+        // Anti-Softlock check right before turn starts
+        if (CheckGameOver()) {
+            EndGame();
+            return;
+        }
 
         netCurrentTurn.Value = playerSeatIndex;
         GoFishPlayer activePlayer = activePlayers.Find(p => p.seatIndex == playerSeatIndex);
 
         ShowTurnNotificationClientRpc(activePlayer.playerName, playerSeatIndex);
 
-        // If it's an AI/Empty seat, simulate a turn
         bool isHuman = GameManager.Instance.allSeats[playerSeatIndex].IsOwnedByServer == false || playerSeatIndex == 0;
-        if (!isHuman) {
-            StartCoroutine(AITurnRoutine(activePlayer));
-        }
+        if (!isHuman) StartCoroutine(AITurnRoutine(activePlayer));
     }
 
     [ClientRpc]
     private void ShowTurnNotificationClientRpc(string pName, int playerSeatIndex) {
         if (turnIndicatorPopUp != null) {
             bool isMe = (playerSeatIndex == GameManager.Instance.myPlayerIndex);
-            turnIndicatorText.text = isMe ? "YOUR TURN" : $"{pName.ToUpper()}'S TURN";
-            StartCoroutine(PopUpRoutine());
+            string msg = isMe ? "YOUR TURN" : $"{pName.ToUpper()}'S TURN";
+
+            if (bannerCoroutine != null) StopCoroutine(bannerCoroutine);
+            bannerCoroutine = StartCoroutine(CustomPopUpRoutine(msg, 1.5f));
         }
 
-        // Handle the UX Reminder for the local player
         if (reminderCoroutine != null) StopCoroutine(reminderCoroutine);
-
         if (playerSeatIndex == GameManager.Instance.myPlayerIndex) {
             reminderCoroutine = StartCoroutine(TurnReminderRoutine());
         }
     }
 
-    IEnumerator PopUpRoutine() {
+    IEnumerator CustomPopUpRoutine(string message, float duration) {
         turnIndicatorPopUp.SetActive(true);
-        yield return new WaitForSeconds(1.5f);
+        turnIndicatorText.text = message;
+        yield return new WaitForSeconds(duration);
         turnIndicatorPopUp.SetActive(false);
     }
 
     IEnumerator TurnReminderRoutine() {
-        // Wait for the popup to clear and give them a few seconds to think
         yield return new WaitForSeconds(4.0f);
-
-        // Keep reminding them every 6 seconds as long as it remains their turn
         while (netCurrentTurn.Value == GameManager.Instance.myPlayerIndex) {
             UpdateLog("Your Turn: Click an opponent's hand to ask for a card.");
             yield return new WaitForSeconds(6.0f);
         }
     }
 
-    // --- REQUEST & TRANSFER LOGIC ---
-
     [ServerRpc(RequireOwnership = false)]
     public void SubmitRequestServerRpc(int requesterSeat, int targetSeat, Rank requestedRank) {
-        // Stop the reminder loop on the server immediately so it doesn't overlap the dialogue
         if (reminderCoroutine != null) StopCoroutine(reminderCoroutine);
 
         GoFishPlayer requester = activePlayers.Find(p => p.seatIndex == requesterSeat);
         GoFishPlayer target = activePlayers.Find(p => p.seatIndex == targetSeat);
+        string highlightedRank = $"<color=yellow><b>{requestedRank}s</b></color>";
 
-        UpdateLogServerAndClient($"{requester.playerName}: 'Do you have any {requestedRank}s, {target.playerName}?'");
+        UpdateLogServerAndClient($"{requester.playerName}: 'Do you have any {highlightedRank}, {target.playerName}?'");
+        ShowBannerClientRpc($"ASKING FOR {highlightedRank}!", 2.5f);
 
         if (target.HasRank(requestedRank)) {
-            TransferCardsServer(requesterSeat, targetSeat, requestedRank);
-            CheckForBooksServer(requester);
-            UpdateLogServerAndClient($"{target.playerName} had it! {requester.playerName} goes again.");
-            StartTurnServer(requesterSeat); // They guessed right, go again
+            StartCoroutine(SuccessfulStealRoutine(requester, target, requestedRank));
         } else {
             UpdateLogServerAndClient($"{target.playerName}: 'GO FISH!'");
             StartCoroutine(GoFishRoutine(requester, requestedRank));
         }
+    }
+
+    [ClientRpc]
+    private void ShowBannerClientRpc(string message, float duration) {
+        if (turnIndicatorPopUp != null) {
+            if (bannerCoroutine != null) StopCoroutine(bannerCoroutine);
+            bannerCoroutine = StartCoroutine(CustomPopUpRoutine(message, duration));
+        }
+    }
+
+    IEnumerator SuccessfulStealRoutine(GoFishPlayer requester, GoFishPlayer target, Rank requestedRank) {
+        TransferCardsServer(requester.seatIndex, target.seatIndex, requestedRank);
+        yield return new WaitForSeconds(1.0f);
+        FullStateSync();
+
+        CheckForBooksServer(requester);
+        UpdateLogServerAndClient($"{target.playerName} had it! {requester.playerName} goes again.");
+        yield return new WaitForSeconds(1.5f);
+
+        StartTurnServer(requester.seatIndex);
     }
 
     private void TransferCardsServer(int requesterSeat, int targetSeat, Rank rank) {
@@ -162,10 +179,7 @@ public class GoFishManager : NetworkBehaviour {
         foreach (CardView cv in cardsToMove) {
             NetworkObject netObj = cv.GetComponent<NetworkObject>();
             if (netObj != null) {
-                // Change network ownership to the stealer
                 netObj.ChangeOwnership(reqHand.GetComponent<NetworkObject>().OwnerClientId);
-
-                // Tell clients to physically move the 3D card
                 MoveCardClientRpc(netObj.NetworkObjectId, reqHand.GetComponent<NetworkObject>().NetworkObjectId, tgtHand.GetComponent<NetworkObject>().NetworkObjectId);
             }
         }
@@ -175,30 +189,22 @@ public class GoFishManager : NetworkBehaviour {
     private void MoveCardClientRpc(ulong cardNetId, ulong newHandNetId, ulong oldHandNetId) {
         if (NetworkManager.Singleton.SpawnManager.SpawnedObjects.TryGetValue(cardNetId, out NetworkObject cardObj)) {
             CardView cv = cardObj.GetComponent<CardView>();
-
             if (NetworkManager.Singleton.SpawnManager.SpawnedObjects.TryGetValue(oldHandNetId, out NetworkObject oldHand)) {
                 oldHand.GetComponent<PlayerHand>().RemoveCard(cv);
             }
-
             if (NetworkManager.Singleton.SpawnManager.SpawnedObjects.TryGetValue(newHandNetId, out NetworkObject newHand)) {
                 newHand.GetComponent<PlayerHand>().AddCard(cv);
             }
-
-            // CRITICAL FIX: Force the physics state instantly so it doesn't fall through the table during the network blip
             if (cv.TryGetComponent<Rigidbody>(out var rb)) {
                 rb.isKinematic = true;
-                rb.linearVelocity = Vector3.zero; // Unity 6 standard
+                rb.linearVelocity = Vector3.zero;
                 rb.angularVelocity = Vector3.zero;
-            }
-            if (cv.TryGetComponent<Collider>(out var col)) {
-                col.isTrigger = true;
             }
         }
     }
 
     IEnumerator GoFishRoutine(GoFishPlayer player, Rank requestedRank) {
-        yield return new WaitForSeconds(1.0f); // dramatic pause
-
+        yield return new WaitForSeconds(1.0f);
         PlayerHand visualHand = GameManager.Instance.allSeats[player.seatIndex];
         Card drawnCard = null;
 
@@ -206,51 +212,103 @@ public class GoFishManager : NetworkBehaviour {
             drawnCard = mainDeck.ServerDrawCard(visualHand);
         }
 
-        yield return new WaitForSeconds(1.5f); // wait for card to arrive in hand
-
+        yield return new WaitForSeconds(1.5f);
+        FullStateSync();
         CheckForBooksServer(player);
 
         if (drawnCard != null && drawnCard.rank == requestedRank) {
-            UpdateLogServerAndClient($"{player.playerName} drew the {requestedRank} they asked for! They go again.");
+            string highlightedRank = $"<color=yellow><b>{requestedRank}s</b></color>";
+            UpdateLogServerAndClient($"{player.playerName} drew the {highlightedRank} they asked for! They go again.");
+            ShowBannerClientRpc("LUCKY DRAW!", 2.0f);
+            yield return new WaitForSeconds(2.0f);
             StartTurnServer(player.seatIndex);
         } else {
-            // End turn, pass to next player
             int currentIndex = activePlayers.IndexOf(player);
             int nextPlayerIndex = (currentIndex + 1) % activePlayers.Count;
-
-            if (CheckGameOver()) EndGame();
-            else StartTurnServer(activePlayers[nextPlayerIndex].seatIndex);
+            StartTurnServer(activePlayers[nextPlayerIndex].seatIndex);
         }
     }
 
-    // --- SCORING & REFILLING ---
-
+    // --- SCORING & GHOST BUSTER ---
     private void CheckForBooksServer(GoFishPlayer player) {
         var handData = player.GetLogicalHand();
-        int required = 4; // Standard book size
+        if (handData.Count == 0) return;
 
-        var groups = handData.GroupBy(c => c.rank).Where(g => g.Count() >= required).ToList();
+        int requiredCards = GoFishSettings.GetMatchCount();
+        var groups = handData.GroupBy(c => c.rank).Where(g => g.Count() >= requiredCards).ToList();
+        if (groups.Count == 0) return;
+
+        List<string> scoredRanksThisCheck = new List<string>();
+        int totalScoreAdded = 0;
+        PlayerHand hand = GameManager.Instance.allSeats[player.seatIndex];
+        List<ulong> networkIdsToDespawn = new List<ulong>();
 
         foreach (var group in groups) {
             Rank matchRank = group.Key;
+            int totalCardsOfRank = group.Count();
+            int setsScored = totalCardsOfRank / requiredCards;
 
-            GameManager.Instance.AddScore(player.seatIndex, 1);
-            UpdateLogServerAndClient($"{player.playerName} scored a book of {matchRank}s!");
+            for (int i = 0; i < setsScored; i++) {
+                totalScoreAdded++;
+                scoredRanksThisCheck.Add($"<color=yellow><b>{matchRank}s</b></color>");
 
-            PlayerHand hand = GameManager.Instance.allSeats[player.seatIndex];
-            List<CardView> cardsToRemove = hand.cardsInHand.Where(c => c.GetCardData() != null && c.GetCardData().rank == matchRank).ToList();
+                List<CardView> cardsToRemove = hand.cardsInHand
+                    .Where(c => c.GetCardData() != null && c.GetCardData().rank == matchRank)
+                    .Take(requiredCards).ToList();
 
-            foreach (var cv in cardsToRemove) {
-                NetworkObject netObj = cv.GetComponent<NetworkObject>();
-                if (netObj != null) {
-                    netObj.Despawn(); // This gracefully destroys it across the entire network
+                foreach (var cv in cardsToRemove) {
+                    if (cv.TryGetComponent<NetworkObject>(out var netObj)) {
+                        networkIdsToDespawn.Add(netObj.NetworkObjectId);
+                    }
                 }
             }
         }
 
+        if (totalScoreAdded > 0) {
+            GameManager.Instance.AddScore(player.seatIndex, totalScoreAdded);
+            string allRanks = string.Join(", ", scoredRanksThisCheck);
+
+            UpdateLogServerAndClient($"{player.playerName} scored matching sets of: {allRanks}!");
+            ShowBannerClientRpc($"{player.playerName.ToUpper()} SCORED!", 3.0f);
+
+            StartCoroutine(DespawnCardsRoutine(networkIdsToDespawn, player));
+        }
+    }
+
+    IEnumerator DespawnCardsRoutine(List<ulong> networkIds, GoFishPlayer player) {
+        // GHOST BUSTER: Tell all clients to remove these exact cards from their lists FIRST
+        RemoveCardsFromAllListsClientRpc(networkIds.ToArray());
+        yield return new WaitForSeconds(0.2f);
+
+        // Now that the clients let go of them, the Server safely destroys them
+        foreach (ulong id in networkIds) {
+            if (NetworkManager.Singleton.SpawnManager.SpawnedObjects.TryGetValue(id, out NetworkObject netObj)) {
+                netObj.Despawn();
+            }
+        }
+
+        yield return new WaitForSeconds(0.3f);
+        FullStateSync();
+
         if (player.GetLogicalHand().Count == 0 && mainDeck.cards.Count > 0) {
             UpdateLogServerAndClient($"{player.playerName} is out of cards! Redrawing...");
             StartCoroutine(RefillHandRoutine(player));
+        } else if (CheckGameOver()) {
+            EndGame();
+        }
+    }
+
+    [ClientRpc]
+    private void RemoveCardsFromAllListsClientRpc(ulong[] cardIds) {
+        foreach (ulong id in cardIds) {
+            if (NetworkManager.Singleton.SpawnManager.SpawnedObjects.TryGetValue(id, out NetworkObject netObj)) {
+                CardView cv = netObj.GetComponent<CardView>();
+                if (cv != null) {
+                    foreach (var seat in GameManager.Instance.allSeats) {
+                        if (seat != null && seat.cardsInHand.Contains(cv)) seat.RemoveCard(cv);
+                    }
+                }
+            }
         }
     }
 
@@ -262,22 +320,75 @@ public class GoFishManager : NetworkBehaviour {
                 yield return new WaitForSeconds(0.2f);
             }
         }
+
+        yield return new WaitForSeconds(1.0f);
+        FullStateSync();
+        CheckForBooksServer(player);
+    }
+
+    // --- DESYNC & SOFT-LOCK CATCHERS ---
+    private void FullStateSync() {
+        if (!IsServer) return;
+        foreach (var seat in activePlayers) {
+            PlayerHand hand = GameManager.Instance.allSeats[seat.seatIndex];
+            ulong handNetId = hand.GetComponent<NetworkObject>().NetworkObjectId;
+            List<ulong> cardIds = hand.cardsInHand
+                .Where(c => c != null)
+                .Select(c => c.GetComponent<NetworkObject>().NetworkObjectId).ToList();
+
+            SyncSingleHandClientRpc(handNetId, cardIds.ToArray());
+        }
+    }
+
+    [ClientRpc]
+    private void SyncSingleHandClientRpc(ulong handNetId, ulong[] cardIds) {
+        if (NetworkManager.Singleton.SpawnManager.SpawnedObjects.TryGetValue(handNetId, out NetworkObject handNetObj)) {
+            PlayerHand hand = handNetObj.GetComponent<PlayerHand>();
+            hand.cardsInHand.Clear();
+
+            foreach (ulong cId in cardIds) {
+                if (NetworkManager.Singleton.SpawnManager.SpawnedObjects.TryGetValue(cId, out NetworkObject cardNetObj)) {
+                    CardView cv = cardNetObj.GetComponent<CardView>();
+                    if (cv != null) {
+                        hand.AddCard(cv);
+                        if (cv.TryGetComponent<Rigidbody>(out var rb)) rb.isKinematic = true;
+                    }
+                }
+            }
+        }
     }
 
     bool CheckGameOver() {
-        return mainDeck.cards.Count == 0 && activePlayers.All(p => p.GetLogicalHand().Count == 0);
+        if (mainDeck.cards.Count > 0) return false;
+
+        List<Card> allCardsLeft = new List<Card>();
+        foreach (var p in activePlayers) allCardsLeft.AddRange(p.GetLogicalHand());
+
+        if (allCardsLeft.Count == 0) return true;
+
+        // THE SOFTLOCK CATCHER: Can the remaining cards form ANY match?
+        int requiredCards = GoFishSettings.GetMatchCount();
+        bool matchPossible = allCardsLeft.GroupBy(c => c.rank).Any(g => g.Count() >= requiredCards);
+
+        if (!matchPossible) {
+            Debug.LogWarning("<color=red>[GoFishManager]</color> EMERGENCY GAME OVER: Remaining cards cannot form a match. A card was likely lost to the void!");
+            return true;
+        }
+
+        return false;
     }
 
     void EndGame() {
+        if (!gameInProgress) return;
         gameInProgress = false;
+
         if (reminderCoroutine != null) StopCoroutine(reminderCoroutine);
-        UpdateLogServerAndClient("GAME OVER!");
+
+        UpdateLogServerAndClient("GAME OVER! Calculating Winner...");
+        ShowBannerClientRpc("GAME OVER!", 5.0f);
     }
 
-    // --- UI HELPERS ---
-    public void UpdateLog(string message) {
-        if (gameLogText != null) gameLogText.text = message;
-    }
+    public void UpdateLog(string message) { if (gameLogText != null) gameLogText.text = message; }
 
     private void UpdateLogServerAndClient(string message) {
         UpdateLog(message);
@@ -286,17 +397,13 @@ public class GoFishManager : NetworkBehaviour {
 
     [ClientRpc]
     private void UpdateLogClientRpc(string message) {
-        // We pause the local reminder routine here so dialogue isn't overwritten instantly
         if (reminderCoroutine != null) StopCoroutine(reminderCoroutine);
         UpdateLog(message);
-
-        // Restart the reminder timer safely if it is still my turn
         if (netCurrentTurn.Value == GameManager.Instance.myPlayerIndex && gameInProgress) {
             reminderCoroutine = StartCoroutine(TurnReminderRoutine());
         }
     }
 
-    // --- AI FALLBACK ---
     IEnumerator AITurnRoutine(GoFishPlayer aiPlayer) {
         yield return new WaitForSeconds(2f);
         var hand = aiPlayer.GetLogicalHand();

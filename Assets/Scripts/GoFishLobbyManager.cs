@@ -16,7 +16,7 @@ public class GoFishLobbyManager : NetworkBehaviour {
     public TextMeshProUGUI warningText;
     public GameObject playerEntryPrefab;
     public Transform entryContainer;
-    public Button readyButton; // This should be a separate button in your UI
+    public Button readyButton;
 
     private NetworkVariable<int> netPlayerIndex = new NetworkVariable<int>(0, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
     private NetworkVariable<int> netDeckIndex = new NetworkVariable<int>(0, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
@@ -29,23 +29,24 @@ public class GoFishLobbyManager : NetworkBehaviour {
     }
 
     public override void OnNetworkSpawn() {
-        // 1. CLEAR OLD DATA (Critical for re-joins)
         if (IsServer) {
             lobbyPlayers.Clear();
             NetworkManager.Singleton.OnClientConnectedCallback += HandleClientConnected;
             NetworkManager.Singleton.OnClientDisconnectCallback += HandleClientDisconnected;
 
-            // Add Host
             AddPlayerState(NetworkManager.LocalClient.ClientId, PlayerPrefs.GetString("DisplayName", "Host"));
+
+            // --- THE DEFAULT VALUES FIX ---
+            // Force the NetworkVariables to adopt whatever default values you set in the Unity Inspector
+            netPlayerIndex.Value = playerDropdown.value;
+            netDeckIndex.Value = deckDropdown.value;
+            netModeIndex.Value = modeDropdown.value;
 
             playerDropdown.onValueChanged.AddListener(OnHostUIChanged);
             deckDropdown.onValueChanged.AddListener(OnHostUIChanged);
             modeDropdown.onValueChanged.AddListener(OnHostUIChanged);
         }
 
-        // 2. UI VISIBILITY SETUP
-        // Host: No ready button, yes settings.
-        // Client: Yes ready button, no settings.
         if (IsServer) {
             readyButton.gameObject.SetActive(false);
             startButton.gameObject.SetActive(true);
@@ -61,17 +62,14 @@ public class GoFishLobbyManager : NetworkBehaviour {
             readyButton.onClick.AddListener(OnReadyClicked);
         }
 
-        // 3. SYNC LISTENERS
         netPlayerIndex.OnValueChanged += (oldV, newV) => { playerDropdown.value = newV; RefreshLocalSettings(); };
         netDeckIndex.OnValueChanged += (oldV, newV) => { deckDropdown.value = newV; RefreshLocalSettings(); };
         netModeIndex.OnValueChanged += (oldV, newV) => { modeDropdown.value = newV; RefreshLocalSettings(); };
 
         lobbyPlayers.OnListChanged += (changeEvent) => UpdateLobbyUI();
 
-        // 4. THE FIX: WAIT FOR SERVER TO REGISTER US
         if (IsClient) {
             StartCoroutine(ClientHandshakeRoutine());
-            // Force pull current values immediately
             playerDropdown.value = netPlayerIndex.Value;
             deckDropdown.value = netDeckIndex.Value;
             modeDropdown.value = netModeIndex.Value;
@@ -82,7 +80,6 @@ public class GoFishLobbyManager : NetworkBehaviour {
     }
 
     private IEnumerator ClientHandshakeRoutine() {
-        // Wait until the Server actually adds our ClientId to the NetworkList
         bool foundMe = false;
         while (!foundMe) {
             foreach (var p in lobbyPlayers) {
@@ -94,7 +91,6 @@ public class GoFishLobbyManager : NetworkBehaviour {
             yield return new WaitForSeconds(0.2f);
         }
 
-        // Now that the Server knows we exist, send the name!
         string myName = PlayerPrefs.GetString("DisplayName", "Player");
         UpdatePlayerNameServerRpc(myName);
     }
@@ -132,7 +128,7 @@ public class GoFishLobbyManager : NetworkBehaviour {
         lobbyPlayers.Add(new LobbyPlayerState {
             ClientId = clientId,
             PlayerName = playerName,
-            IsReady = (clientId == 0) // Host is always ready
+            IsReady = (clientId == 0)
         });
     }
 
@@ -191,8 +187,11 @@ public class GoFishLobbyManager : NetworkBehaviour {
             warningText.color = IsServer ? Color.green : Color.white;
         }
 
+        // --- UPDATE GLOBAL SETTINGS ---
         GoFishSettings.PlayerCount = players;
         GoFishSettings.DeckCount = decks;
+
+        // Important Check: Make sure Option 0 in your dropdown is Books, and Option 1 is Pairs!
         GoFishSettings.CurrentMode = (GoFishSettings.ScoringMode)modeDropdown.value;
     }
 
@@ -200,6 +199,7 @@ public class GoFishLobbyManager : NetworkBehaviour {
 
     public void StartGame() {
         if (!IsServer) return;
+        // WARNING: Ensure "GoFishLobby" is actually the name of your Table scene!
         NetworkManager.Singleton.SceneManager.LoadScene("GoFishLobby", UnityEngine.SceneManagement.LoadSceneMode.Single);
     }
 }

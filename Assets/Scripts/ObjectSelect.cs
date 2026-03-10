@@ -70,10 +70,16 @@ public class ObjectSelect : MonoBehaviour {
     }
 
     void Update() {
+        // THE MASTER KILLSWITCH: If Go Fish is running, this script goes to sleep.
+        if (GoFishManager.Instance != null) return;
+
         HandlePointer();
     }
 
     void FixedUpdate() {
+        // THE MASTER KILLSWITCH: Prevent any rogue dragging physics in Go Fish
+        if (GoFishManager.Instance != null) return;
+
         if (state == InputState.Dragging && draggedRb != null) {
             ApplyDragVelocity();
             ApplySoftBounds();
@@ -135,10 +141,6 @@ public class ObjectSelect : MonoBehaviour {
     }
 
     private void SelectObject(GameObject obj) {
-        // 1. The Killswitch: If Go Fish is active, completely ignore sandbox interactions
-        if (GoFishManager.Instance != null) return;
-
-        // 2. Standard Sandbox Logic
         if (obj == null || !obj.CompareTag("MoveableObject")) return;
 
         ClearSelectionAndMenus();
@@ -193,7 +195,6 @@ public class ObjectSelect : MonoBehaviour {
 
         PlayerHand myHand = GameManager.Instance.MyHand;
         if (myHand != null) {
-            // Tell the network to manage the transfer officially!
             GameManager.Instance.RequestAddCardToSpecificHand(selectedCardView, myHand);
         }
 
@@ -246,7 +247,6 @@ public class ObjectSelect : MonoBehaviour {
 
         CardView card = pressedCandidate.GetComponent<CardView>();
         if (card != null && GameManager.Instance != null) {
-            // Tell network we picked it up out of a hand
             GameManager.Instance.RequestRemoveCardFromHands(card);
         }
 
@@ -296,7 +296,6 @@ public class ObjectSelect : MonoBehaviour {
         foreach (var hit in hitColliders) {
             PlayerHand hand = hit.GetComponent<PlayerHand>();
             if (hand != null && GameManager.Instance != null) {
-                // Tell network we dropped it into a hand
                 GameManager.Instance.RequestAddCardToSpecificHand(card, hand);
                 break;
             }

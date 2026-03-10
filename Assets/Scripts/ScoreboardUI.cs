@@ -1,14 +1,26 @@
 using UnityEngine;
-using TMPro; // Assuming you're using TextMeshPro
+using TMPro;
 using System.Collections.Generic;
 
 public class ScoreboardUI : MonoBehaviour {
     [SerializeField] private GameObject scoreboardPanel;
-    [SerializeField] private GameObject scoreEntryPrefab; // A small UI prefab with Name and Score text
-    [SerializeField] private GameObject entryContainer;   // A transform with a VerticalLayoutGroup
+    [SerializeField] private GameObject scoreEntryPrefab;
+    [SerializeField] private GameObject entryContainer;
 
     void Start() {
-        scoreboardPanel.SetActive(false); // Hide on start
+        scoreboardPanel.SetActive(false);
+
+        // Listen for the global score update event
+        if (GameManager.Instance != null) {
+            GameManager.Instance.OnScoresUpdated += HandleScoreUpdate;
+        }
+    }
+
+    void OnDestroy() {
+        // Always clean up listeners when the object is destroyed
+        if (GameManager.Instance != null) {
+            GameManager.Instance.OnScoresUpdated -= HandleScoreUpdate;
+        }
     }
 
     public void ToggleScoreboard() {
@@ -21,17 +33,22 @@ public class ScoreboardUI : MonoBehaviour {
         }
     }
 
+    // Called automatically whenever a point is scored anywhere on the network
+    private void HandleScoreUpdate() {
+        // If the menu is currently open on my screen, refresh it instantly
+        if (scoreboardPanel.activeSelf) {
+            RefreshScores();
+        }
+    }
+
     private void RefreshScores() {
-        // Clear old entries
         foreach (Transform child in entryContainer.transform) {
             Destroy(child.gameObject);
         }
 
-        // Create new entries from GameManager data
         if (GameManager.Instance != null) {
             foreach (var playerData in GameManager.Instance.playerScores) {
                 GameObject entry = Instantiate(scoreEntryPrefab, entryContainer.transform);
-                // Entry setup (assuming entry has a script to set text)
                 entry.GetComponent<ScoreEntry>().SetData(playerData.playerName, playerData.score);
             }
         }

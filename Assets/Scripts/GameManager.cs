@@ -1,6 +1,7 @@
 using UnityEngine;
 using System.Collections.Generic;
 using Unity.Netcode;
+using System;
 
 [System.Serializable]
 public class PlayerScoreData {
@@ -20,6 +21,9 @@ public class GameManager : NetworkBehaviour {
     public int totalPlayers = 4;
     public int myPlayerIndex = -1;
 
+    // GLOBAL EVENT FOR THE UI TO LISTEN TO
+    public event Action OnScoresUpdated;
+
     public ulong MyClientId {
         get {
             if (NetworkManager.Singleton != null) return NetworkManager.Singleton.LocalClientId;
@@ -33,7 +37,6 @@ public class GameManager : NetworkBehaviour {
                 return allSeats[myPlayerIndex];
             }
 
-            // Fail-safe 1: Check ownership locally
             for (int i = 0; i < allSeats.Count; i++) {
                 if (allSeats[i] != null) {
                     NetworkObject netObj = allSeats[i].GetComponent<NetworkObject>();
@@ -44,9 +47,7 @@ public class GameManager : NetworkBehaviour {
                 }
             }
 
-            // Fail-safe 2: If we still don't know, actively ask the Server to resend the data
             if (!IsServer && myPlayerIndex == -1) {
-                Debug.LogWarning("<color=orange>[GameManager]</color> Seat unknown. Requesting assignment from Server...");
                 RequestSeatAssignmentServerRpc();
             }
 
@@ -139,7 +140,6 @@ public class GameManager : NetworkBehaviour {
     [ClientRpc]
     private void SetPlayerIndexClientRpc(int assignedIndex, ClientRpcParams rpcParams = default) {
         myPlayerIndex = assignedIndex;
-        Debug.Log($"<color=green>[GameManager]</color> Received explicit seat assignment: {assignedIndex}");
     }
 
     private void UpdateSeatVisibility(int count) {
@@ -148,11 +148,33 @@ public class GameManager : NetworkBehaviour {
                 allSeats[i].gameObject.SetActive(i < count);
             }
         }
+
+        // Populate the scoreboard list dynamically for all clients when seats are assigned
+        if (playerScores.Count != count && count > 0) {
+            playerScores.Clear();
+            for (int i = 0; i < count; i++) {
+                playerScores.Add(new PlayerScoreData {
+                    playerName = (i == 0) ? "Host" : $"Player {i + 1}",
+                    score = 0
+                });
+            }
+            OnScoresUpdated?.Invoke();
+        }
     }
 
+    // --- NETWORKED SCORING LOGIC ---
     public void AddScore(int playerIndex, int amount) {
+        if (!IsServer) return;
+        AddScoreClientRpc(playerIndex, amount);
+    }
+
+    [ClientRpc]
+    private void AddScoreClientRpc(int playerIndex, int amount) {
         if (playerIndex >= 0 && playerIndex < playerScores.Count) {
             playerScores[playerIndex].score += amount;
+
+            // Ring the global alarm bell so the UI knows to update!
+            OnScoresUpdated?.Invoke();
         }
     }
 
