@@ -10,8 +10,13 @@ public class CardView : MonoBehaviour {
     [Tooltip("Drag the Card_Face Quad's SpriteRenderer here")]
     public SpriteRenderer faceRenderer;
 
+    [Tooltip("Drag your CardFacePlaceholder sprite here to hide opponent cards!")]
+    public Sprite hiddenFaceSprite;
+
     [Header("Prefabs")]
     [SerializeField] private GameObject pilePrefab;
+
+    private bool currentlyHidden = false;
 
     public void Initialize(Card card) {
         this.card = card;
@@ -31,6 +36,25 @@ public class CardView : MonoBehaviour {
         UpdateVisuals();
     }
 
+    void Update() {
+        // Only run the anti-cheat monitor if Go Fish is actively playing
+        if (GoFishManager.Instance == null || GameManager.Instance == null) return;
+
+        // Default to hidden to prevent deck peeking or flying card peeking
+        bool shouldBeHidden = true;
+
+        // If the card is physically inside OUR hand list, we are allowed to see it!
+        if (GameManager.Instance.MyHand != null && GameManager.Instance.MyHand.cardsInHand.Contains(this)) {
+            shouldBeHidden = false;
+        }
+
+        // If the visibility state changed this exact frame, trigger the sprite swap
+        if (shouldBeHidden != currentlyHidden) {
+            currentlyHidden = shouldBeHidden;
+            UpdateVisuals();
+        }
+    }
+
     void UpdateVisuals() {
         if (faceRenderer == null) {
             Debug.LogWarning($"CardView: No face renderer assigned on {gameObject.name}!");
@@ -39,16 +63,26 @@ public class CardView : MonoBehaviour {
 
         if (card == null) return;
 
-        // Construct the string name based on the data to match your Resources folder files
-        string resourceName = $"CardFaces/{card.suit}_{card.rank}";
-
-        // Load the sprite from the Resources folder
-        Sprite loadedFace = Resources.Load<Sprite>(resourceName);
-
-        if (loadedFace != null) {
-            faceRenderer.sprite = loadedFace;
+        if (currentlyHidden) {
+            // Apply the Anti-Cheat Placeholder Sprite
+            if (hiddenFaceSprite != null) {
+                faceRenderer.sprite = hiddenFaceSprite;
+            } else {
+                // Fallback: Try to load it dynamically if it wasn't assigned in the inspector
+                Sprite loadedPlaceholder = Resources.Load<Sprite>("CardFacePlaceholder");
+                if (loadedPlaceholder != null) faceRenderer.sprite = loadedPlaceholder;
+                else Debug.LogWarning("CardView: Assign a hiddenFaceSprite in the Inspector, or place 'CardFacePlaceholder' in a Resources folder!");
+            }
         } else {
-            Debug.LogError($"CardView: Could not find image at Resources/{resourceName}");
+            // Apply the True Face Sprite
+            string resourceName = $"CardFaces/{card.suit}_{card.rank}";
+            Sprite loadedFace = Resources.Load<Sprite>(resourceName);
+
+            if (loadedFace != null) {
+                faceRenderer.sprite = loadedFace;
+            } else {
+                Debug.LogError($"CardView: Could not find image at Resources/{resourceName}");
+            }
         }
     }
 

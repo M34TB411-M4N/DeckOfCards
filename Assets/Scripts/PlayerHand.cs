@@ -1,22 +1,23 @@
 using System.Collections.Generic;
+using System.Linq;
 using Unity.Netcode;
 using UnityEngine;
 
 public class PlayerHand : NetworkBehaviour {
     [Header("Layout Settings")]
-    [SerializeField] private float cardWidth = 2.0f;       
-    [SerializeField] private float padding = 0.1f;         
-    [SerializeField] private float maxHandWidth = 10.0f;   
+    [SerializeField] private float cardWidth = 2.0f;
+    [SerializeField] private float padding = 0.1f;
+    [SerializeField] private float maxHandWidth = 10.0f;
 
     [Header("Visual Tweaks")]
-    [SerializeField] private float cardThickness = 0.03f;  
-    [SerializeField] private Vector3 standingRotation = new Vector3(-90, 0, 0); // Rotation to make them stand up
+    [SerializeField] private float cardThickness = 0.03f;
+    [SerializeField] private Vector3 standingRotation = new Vector3(-90, 0, 0);
     [SerializeField] private float transitionSpeed = 10f;
 
     public List<CardView> cardsInHand = new List<CardView>();
 
     [Header("Camera Settings")]
-    public Transform cameraAnchor; 
+    public Transform cameraAnchor;
 
     void Update() {
         ArrangeCards();
@@ -27,6 +28,10 @@ public class PlayerHand : NetworkBehaviour {
 
         if (!cardsInHand.Contains(card)) {
             cardsInHand.Add(card);
+
+            if (GoFishManager.Instance != null) {
+                SortHandByRank();
+            }
 
             if (card.TryGetComponent<Rigidbody>(out var rb)) {
                 rb.isKinematic = true;
@@ -47,16 +52,25 @@ public class PlayerHand : NetworkBehaviour {
         if (cardsInHand.Contains(card)) {
             cardsInHand.Remove(card);
 
-            if (card.TryGetComponent<Rigidbody>(out var rb)) {
-                rb.isKinematic = false;
-            }
-
-            // Return to solid state for table physics
-            if (card.TryGetComponent<Collider>(out var col)) {
-                col.enabled = true;
-                col.isTrigger = false;
+            // THE FIX: Do not turn physics back on if we are transferring cards in Go Fish!
+            if (GoFishManager.Instance == null) {
+                if (card.TryGetComponent<Rigidbody>(out var rb)) {
+                    rb.isKinematic = false;
+                }
+                if (card.TryGetComponent<Collider>(out var col)) {
+                    col.enabled = true;
+                    col.isTrigger = false;
+                }
             }
         }
+    }
+
+    private void SortHandByRank() {
+        if (cardsInHand.Count <= 1) return;
+        cardsInHand = cardsInHand
+            .Where(c => c != null && c.GetCardData() != null)
+            .OrderBy(c => c.GetCardData().rank)
+            .ToList();
     }
 
     private void ArrangeCards() {
@@ -64,7 +78,6 @@ public class PlayerHand : NetworkBehaviour {
         if (count == 0) return;
 
         float targetSpacing = cardWidth + padding;
-
         float totalRequiredWidth = (count - 1) * targetSpacing;
 
         if (totalRequiredWidth > maxHandWidth) {
@@ -76,7 +89,6 @@ public class PlayerHand : NetworkBehaviour {
 
         for (int i = 0; i < count; i++) {
             float xPos = startX + (i * targetSpacing);
-
             float zPos = i * -cardThickness;
 
             Vector3 targetPos = transform.position
@@ -100,13 +112,9 @@ public class PlayerHand : NetworkBehaviour {
             } else {
                 cardTransform.rotation = Quaternion.Slerp(cardTransform.rotation, finalRot, Time.deltaTime * transitionSpeed);
             }
-            //Transform cardTransform = cardsInHand[i].transform;
-            //cardTransform.position = Vector3.Lerp(cardTransform.position, targetPos, Time.deltaTime * transitionSpeed);
-            //cardTransform.rotation = Quaternion.Slerp(cardTransform.rotation, finalRot, Time.deltaTime * transitionSpeed);
         }
     }
 
-    // This fires automatically when the Server assigns this seat to a Client
     protected override void OnOwnershipChanged(ulong previousOwner, ulong newOwner) {
         if (IsOwner && GameManager.Instance != null) {
             GameManager.Instance.myPlayerIndex = GameManager.Instance.allSeats.IndexOf(this);

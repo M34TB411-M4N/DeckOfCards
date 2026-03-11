@@ -76,16 +76,26 @@ public class GoFishManager : NetworkBehaviour {
         }
 
         yield return new WaitForSeconds(1.0f);
-        foreach (var player in activePlayers) CheckForBooksServer(player);
+
+        // Use the strict sequencer for initial book checks
+        foreach (var player in activePlayers) {
+            yield return StartCoroutine(CheckForBooksRoutine(player));
+        }
 
         UpdateLogServerAndClient("Game Started!");
         FullStateSync();
+        TriggerCameraSnapClientRpc();
+    }
+
+    [ClientRpc]
+    private void TriggerCameraSnapClientRpc() {
+        ObjectSelect objSelect = FindFirstObjectByType<ObjectSelect>();
+        if (objSelect != null) objSelect.OnFocusOnHandButtonPressed();
     }
 
     private void StartTurnServer(int playerSeatIndex) {
         if (!IsServer || !gameInProgress) return;
 
-        // Anti-Softlock check right before turn starts
         if (CheckGameOver()) {
             EndGame();
             return;
@@ -118,7 +128,7 @@ public class GoFishManager : NetworkBehaviour {
 
     IEnumerator CustomPopUpRoutine(string message, float duration) {
         turnIndicatorPopUp.SetActive(true);
-        turnIndicatorText.text = message;
+        if (turnIndicatorText != null) turnIndicatorText.text = message;
         yield return new WaitForSeconds(duration);
         turnIndicatorPopUp.SetActive(false);
     }
@@ -158,16 +168,28 @@ public class GoFishManager : NetworkBehaviour {
         }
     }
 
+    // --- STRICT SEQUENCER: STEAL ---
     IEnumerator SuccessfulStealRoutine(GoFishPlayer requester, GoFishPlayer target, Rank requestedRank) {
         TransferCardsServer(requester.seatIndex, target.seatIndex, requestedRank);
         yield return new WaitForSeconds(1.0f);
         FullStateSync();
 
-        CheckForBooksServer(requester);
+        // 1. Refill Target if Drained
+        if (target.GetLogicalHand().Count == 0 && mainDeck.cards.Count > 0) {
+            UpdateLogServerAndClient($"{target.playerName} was robbed of their last card! Redrawing...");
+            yield return StartCoroutine(RefillHandRoutine(target));
+        }
+
+        // 2. Check and Score Books (Wait for it to fully complete)
+        yield return StartCoroutine(CheckForBooksRoutine(requester));
+
+        // 3. Announce success and grant extra turn
         UpdateLogServerAndClient($"{target.playerName} had it! {requester.playerName} goes again.");
         yield return new WaitForSeconds(1.5f);
 
-        StartTurnServer(requester.seatIndex);
+        // 4. Safely check game over now that all coroutines are finished
+        if (CheckGameOver()) EndGame();
+        else StartTurnServer(requester.seatIndex);
     }
 
     private void TransferCardsServer(int requesterSeat, int targetSeat, Rank rank) {
@@ -177,6 +199,9 @@ public class GoFishManager : NetworkBehaviour {
         List<CardView> cardsToMove = tgtHand.cardsInHand.Where(cv => cv.GetCardData() != null && cv.GetCardData().rank == rank).ToList();
 
         foreach (CardView cv in cardsToMove) {
+            tgtHand.RemoveCard(cv);
+            reqHand.AddCard(cv);
+
             NetworkObject netObj = cv.GetComponent<NetworkObject>();
             if (netObj != null) {
                 netObj.ChangeOwnership(reqHand.GetComponent<NetworkObject>().OwnerClientId);
@@ -195,14 +220,17 @@ public class GoFishManager : NetworkBehaviour {
             if (NetworkManager.Singleton.SpawnManager.SpawnedObjects.TryGetValue(newHandNetId, out NetworkObject newHand)) {
                 newHand.GetComponent<PlayerHand>().AddCard(cv);
             }
+
             if (cv.TryGetComponent<Rigidbody>(out var rb)) {
                 rb.isKinematic = true;
                 rb.linearVelocity = Vector3.zero;
                 rb.angularVelocity = Vector3.zero;
             }
+            if (cv.TryGetComponent<Collider>(out var col)) col.enabled = false;
         }
     }
 
+    // --- STRICT SEQUENCER: DRAW ---
     IEnumerator GoFishRoutine(GoFishPlayer player, Rank requestedRank) {
         yield return new WaitForSeconds(1.0f);
         PlayerHand visualHand = GameManager.Instance.allSeats[player.seatIndex];
@@ -214,29 +242,35 @@ public class GoFishManager : NetworkBehaviour {
 
         yield return new WaitForSeconds(1.5f);
         FullStateSync();
-        CheckForBooksServer(player);
+
+        // Wait for scoring to completely finish
+        yield return StartCoroutine(CheckForBooksRoutine(player));
 
         if (drawnCard != null && drawnCard.rank == requestedRank) {
             string highlightedRank = $"<color=yellow><b>{requestedRank}s</b></color>";
             UpdateLogServerAndClient($"{player.playerName} drew the {highlightedRank} they asked for! They go again.");
             ShowBannerClientRpc("LUCKY DRAW!", 2.0f);
             yield return new WaitForSeconds(2.0f);
-            StartTurnServer(player.seatIndex);
+
+            if (CheckGameOver()) EndGame();
+            else StartTurnServer(player.seatIndex);
         } else {
             int currentIndex = activePlayers.IndexOf(player);
             int nextPlayerIndex = (currentIndex + 1) % activePlayers.Count;
-            StartTurnServer(activePlayers[nextPlayerIndex].seatIndex);
+
+            if (CheckGameOver()) EndGame();
+            else StartTurnServer(activePlayers[nextPlayerIndex].seatIndex);
         }
     }
 
-    // --- SCORING & GHOST BUSTER ---
-    private void CheckForBooksServer(GoFishPlayer player) {
+    // --- STRICT SEQUENCER: SCORING ---
+    private IEnumerator CheckForBooksRoutine(GoFishPlayer player) {
         var handData = player.GetLogicalHand();
-        if (handData.Count == 0) return;
+        if (handData.Count == 0) yield break;
 
         int requiredCards = GoFishSettings.GetMatchCount();
         var groups = handData.GroupBy(c => c.rank).Where(g => g.Count() >= requiredCards).ToList();
-        if (groups.Count == 0) return;
+        if (groups.Count == 0) yield break;
 
         List<string> scoredRanksThisCheck = new List<string>();
         int totalScoreAdded = 0;
@@ -257,6 +291,7 @@ public class GoFishManager : NetworkBehaviour {
                     .Take(requiredCards).ToList();
 
                 foreach (var cv in cardsToRemove) {
+                    hand.RemoveCard(cv); // Remove from server memory immediately
                     if (cv.TryGetComponent<NetworkObject>(out var netObj)) {
                         networkIdsToDespawn.Add(netObj.NetworkObjectId);
                     }
@@ -271,30 +306,26 @@ public class GoFishManager : NetworkBehaviour {
             UpdateLogServerAndClient($"{player.playerName} scored matching sets of: {allRanks}!");
             ShowBannerClientRpc($"{player.playerName.ToUpper()} SCORED!", 3.0f);
 
-            StartCoroutine(DespawnCardsRoutine(networkIdsToDespawn, player));
-        }
-    }
+            // 1. Tell clients to drop the cards visually
+            RemoveCardsFromAllListsClientRpc(networkIdsToDespawn.ToArray());
+            yield return new WaitForSeconds(0.2f);
 
-    IEnumerator DespawnCardsRoutine(List<ulong> networkIds, GoFishPlayer player) {
-        // GHOST BUSTER: Tell all clients to remove these exact cards from their lists FIRST
-        RemoveCardsFromAllListsClientRpc(networkIds.ToArray());
-        yield return new WaitForSeconds(0.2f);
-
-        // Now that the clients let go of them, the Server safely destroys them
-        foreach (ulong id in networkIds) {
-            if (NetworkManager.Singleton.SpawnManager.SpawnedObjects.TryGetValue(id, out NetworkObject netObj)) {
-                netObj.Despawn();
+            // 2. Safely destroy the network objects
+            foreach (ulong id in networkIdsToDespawn) {
+                if (NetworkManager.Singleton.SpawnManager.SpawnedObjects.TryGetValue(id, out NetworkObject netObj)) {
+                    netObj.Despawn();
+                }
             }
-        }
 
-        yield return new WaitForSeconds(0.3f);
-        FullStateSync();
+            // 3. Force sync to clear any ghost visuals
+            yield return new WaitForSeconds(0.3f);
+            FullStateSync();
 
-        if (player.GetLogicalHand().Count == 0 && mainDeck.cards.Count > 0) {
-            UpdateLogServerAndClient($"{player.playerName} is out of cards! Redrawing...");
-            StartCoroutine(RefillHandRoutine(player));
-        } else if (CheckGameOver()) {
-            EndGame();
+            // 4. Refill if scoring emptied their hand
+            if (player.GetLogicalHand().Count == 0 && mainDeck.cards.Count > 0) {
+                UpdateLogServerAndClient($"{player.playerName} scored their last card! Redrawing...");
+                yield return StartCoroutine(RefillHandRoutine(player));
+            }
         }
     }
 
@@ -323,10 +354,10 @@ public class GoFishManager : NetworkBehaviour {
 
         yield return new WaitForSeconds(1.0f);
         FullStateSync();
-        CheckForBooksServer(player);
+        yield return StartCoroutine(CheckForBooksRoutine(player));
     }
 
-    // --- DESYNC & SOFT-LOCK CATCHERS ---
+    // --- BULLETPROOF SYNC ---
     private void FullStateSync() {
         if (!IsServer) return;
         foreach (var seat in activePlayers) {
@@ -366,12 +397,13 @@ public class GoFishManager : NetworkBehaviour {
 
         if (allCardsLeft.Count == 0) return true;
 
-        // THE SOFTLOCK CATCHER: Can the remaining cards form ANY match?
         int requiredCards = GoFishSettings.GetMatchCount();
         bool matchPossible = allCardsLeft.GroupBy(c => c.rank).Any(g => g.Count() >= requiredCards);
 
         if (!matchPossible) {
-            Debug.LogWarning("<color=red>[GoFishManager]</color> EMERGENCY GAME OVER: Remaining cards cannot form a match. A card was likely lost to the void!");
+            // DEEP DIAGNOSTIC LOG
+            string left = string.Join(", ", allCardsLeft.Select(c => c.rank.ToString()));
+            Debug.LogWarning($"<color=red>[GoFishManager]</color> EMERGENCY GAME OVER! Leftover cards: {left}. Match Size: {requiredCards}");
             return true;
         }
 
