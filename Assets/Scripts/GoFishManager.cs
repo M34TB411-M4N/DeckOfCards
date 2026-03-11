@@ -56,8 +56,6 @@ public class GoFishManager : NetworkBehaviour {
 
         if (activePlayers.Count == 0) yield break;
 
-        Debug.Log($"<color=cyan>[GoFishManager]</color> Game Started with Settings -> Players: {GoFishSettings.PlayerCount}, Decks: {GoFishSettings.DeckCount}, Mode: {GoFishSettings.CurrentMode}, Match Size: {GoFishSettings.GetMatchCount()}");
-
         yield return StartCoroutine(InitialDeal());
 
         gameInProgress = true;
@@ -77,7 +75,6 @@ public class GoFishManager : NetworkBehaviour {
 
         yield return new WaitForSeconds(1.0f);
 
-        // Use the strict sequencer for initial book checks
         foreach (var player in activePlayers) {
             yield return StartCoroutine(CheckForBooksRoutine(player));
         }
@@ -95,6 +92,8 @@ public class GoFishManager : NetworkBehaviour {
 
     private void StartTurnServer(int playerSeatIndex) {
         if (!IsServer || !gameInProgress) return;
+
+        PrintTableState($"Start of Turn for Seat {playerSeatIndex}");
 
         if (CheckGameOver()) {
             EndGame();
@@ -147,8 +146,10 @@ public class GoFishManager : NetworkBehaviour {
 
         GoFishPlayer requester = activePlayers.Find(p => p.seatIndex == requesterSeat);
         GoFishPlayer target = activePlayers.Find(p => p.seatIndex == targetSeat);
-        string highlightedRank = $"<color=yellow><b>{requestedRank}s</b></color>";
 
+        PrintTableState($"{requester.playerName} requesting {requestedRank}s from {target.playerName}");
+
+        string highlightedRank = $"<color=yellow><b>{requestedRank}s</b></color>";
         UpdateLogServerAndClient($"{requester.playerName}: 'Do you have any {highlightedRank}, {target.playerName}?'");
         ShowBannerClientRpc($"ASKING FOR {highlightedRank}!", 2.5f);
 
@@ -168,26 +169,23 @@ public class GoFishManager : NetworkBehaviour {
         }
     }
 
-    // --- STRICT SEQUENCER: STEAL ---
     IEnumerator SuccessfulStealRoutine(GoFishPlayer requester, GoFishPlayer target, Rank requestedRank) {
         TransferCardsServer(requester.seatIndex, target.seatIndex, requestedRank);
         yield return new WaitForSeconds(1.0f);
         FullStateSync();
 
-        // 1. Refill Target if Drained
+        PrintTableState($"After Steal, Before Score Check");
+
         if (target.GetLogicalHand().Count == 0 && mainDeck.cards.Count > 0) {
             UpdateLogServerAndClient($"{target.playerName} was robbed of their last card! Redrawing...");
             yield return StartCoroutine(RefillHandRoutine(target));
         }
 
-        // 2. Check and Score Books (Wait for it to fully complete)
         yield return StartCoroutine(CheckForBooksRoutine(requester));
 
-        // 3. Announce success and grant extra turn
         UpdateLogServerAndClient($"{target.playerName} had it! {requester.playerName} goes again.");
         yield return new WaitForSeconds(1.5f);
 
-        // 4. Safely check game over now that all coroutines are finished
         if (CheckGameOver()) EndGame();
         else StartTurnServer(requester.seatIndex);
     }
@@ -196,7 +194,9 @@ public class GoFishManager : NetworkBehaviour {
         PlayerHand reqHand = GameManager.Instance.allSeats[requesterSeat];
         PlayerHand tgtHand = GameManager.Instance.allSeats[targetSeat];
 
-        List<CardView> cardsToMove = tgtHand.cardsInHand.Where(cv => cv.GetCardData() != null && cv.GetCardData().rank == rank).ToList();
+        List<CardView> cardsToMove = tgtHand.cardsInHand.Where(cv => cv != null && cv.GetCardData() != null && cv.GetCardData().rank == rank).ToList();
+
+        Debug.Log($"<color=cyan>[DEBUG-STEAL]</color> Transferring {cardsToMove.Count} cards of rank {rank} from Seat {targetSeat} to Seat {requesterSeat}");
 
         foreach (CardView cv in cardsToMove) {
             tgtHand.RemoveCard(cv);
@@ -230,7 +230,6 @@ public class GoFishManager : NetworkBehaviour {
         }
     }
 
-    // --- STRICT SEQUENCER: DRAW ---
     IEnumerator GoFishRoutine(GoFishPlayer player, Rank requestedRank) {
         yield return new WaitForSeconds(1.0f);
         PlayerHand visualHand = GameManager.Instance.allSeats[player.seatIndex];
@@ -243,7 +242,6 @@ public class GoFishManager : NetworkBehaviour {
         yield return new WaitForSeconds(1.5f);
         FullStateSync();
 
-        // Wait for scoring to completely finish
         yield return StartCoroutine(CheckForBooksRoutine(player));
 
         if (drawnCard != null && drawnCard.rank == requestedRank) {
@@ -263,7 +261,6 @@ public class GoFishManager : NetworkBehaviour {
         }
     }
 
-    // --- STRICT SEQUENCER: SCORING ---
     private IEnumerator CheckForBooksRoutine(GoFishPlayer player) {
         var handData = player.GetLogicalHand();
         if (handData.Count == 0) yield break;
@@ -277,6 +274,8 @@ public class GoFishManager : NetworkBehaviour {
         PlayerHand hand = GameManager.Instance.allSeats[player.seatIndex];
         List<ulong> networkIdsToDespawn = new List<ulong>();
 
+        Debug.Log($"<color=cyan>[DEBUG-SCORE]</color> Found {groups.Count} matching sets for {player.playerName}");
+
         foreach (var group in groups) {
             Rank matchRank = group.Key;
             int totalCardsOfRank = group.Count();
@@ -287,11 +286,11 @@ public class GoFishManager : NetworkBehaviour {
                 scoredRanksThisCheck.Add($"<color=yellow><b>{matchRank}s</b></color>");
 
                 List<CardView> cardsToRemove = hand.cardsInHand
-                    .Where(c => c.GetCardData() != null && c.GetCardData().rank == matchRank)
+                    .Where(c => c != null && c.GetCardData() != null && c.GetCardData().rank == matchRank)
                     .Take(requiredCards).ToList();
 
                 foreach (var cv in cardsToRemove) {
-                    hand.RemoveCard(cv); // Remove from server memory immediately
+                    hand.RemoveCard(cv);
                     if (cv.TryGetComponent<NetworkObject>(out var netObj)) {
                         networkIdsToDespawn.Add(netObj.NetworkObjectId);
                     }
@@ -306,22 +305,19 @@ public class GoFishManager : NetworkBehaviour {
             UpdateLogServerAndClient($"{player.playerName} scored matching sets of: {allRanks}!");
             ShowBannerClientRpc($"{player.playerName.ToUpper()} SCORED!", 3.0f);
 
-            // 1. Tell clients to drop the cards visually
             RemoveCardsFromAllListsClientRpc(networkIdsToDespawn.ToArray());
             yield return new WaitForSeconds(0.2f);
 
-            // 2. Safely destroy the network objects
             foreach (ulong id in networkIdsToDespawn) {
                 if (NetworkManager.Singleton.SpawnManager.SpawnedObjects.TryGetValue(id, out NetworkObject netObj)) {
                     netObj.Despawn();
                 }
             }
 
-            // 3. Force sync to clear any ghost visuals
             yield return new WaitForSeconds(0.3f);
             FullStateSync();
+            PrintTableState($"After Scoring Books for {player.playerName}");
 
-            // 4. Refill if scoring emptied their hand
             if (player.GetLogicalHand().Count == 0 && mainDeck.cards.Count > 0) {
                 UpdateLogServerAndClient($"{player.playerName} scored their last card! Redrawing...");
                 yield return StartCoroutine(RefillHandRoutine(player));
@@ -357,7 +353,6 @@ public class GoFishManager : NetworkBehaviour {
         yield return StartCoroutine(CheckForBooksRoutine(player));
     }
 
-    // --- BULLETPROOF SYNC ---
     private void FullStateSync() {
         if (!IsServer) return;
         foreach (var seat in activePlayers) {
@@ -401,9 +396,9 @@ public class GoFishManager : NetworkBehaviour {
         bool matchPossible = allCardsLeft.GroupBy(c => c.rank).Any(g => g.Count() >= requiredCards);
 
         if (!matchPossible) {
-            // DEEP DIAGNOSTIC LOG
-            string left = string.Join(", ", allCardsLeft.Select(c => c.rank.ToString()));
-            Debug.LogWarning($"<color=red>[GoFishManager]</color> EMERGENCY GAME OVER! Leftover cards: {left}. Match Size: {requiredCards}");
+            string left = string.Join(", ", allCardsLeft.Select(c => c != null ? c.rank.ToString() : "NULL"));
+            Debug.LogWarning($"<color=red>[GoFishManager]</color> EMERGENCY GAME OVER! Leftover cards: [{left}]. Match Size required: {requiredCards}");
+            PrintTableState("EMERGENCY GAME OVER TRIGGERED");
             return true;
         }
 
@@ -446,5 +441,27 @@ public class GoFishManager : NetworkBehaviour {
         GoFishPlayer target = validTargets[Random.Range(0, validTargets.Count)];
 
         SubmitRequestServerRpc(aiPlayer.seatIndex, target.seatIndex, randomRank);
+    }
+
+    // --- DIAGNOSTICS LOGGING ---
+    private void PrintTableState(string context) {
+        if (!IsServer) return;
+        string log = $"<color=magenta>========== [TABLE STATE: {context}] ==========</color>\n";
+        log += $"Deck remaining: {mainDeck.cards.Count} cards.\n";
+
+        foreach (var p in activePlayers) {
+            PlayerHand hand = GameManager.Instance.allSeats[p.seatIndex];
+            if (hand == null) continue;
+
+            string cardRanks = string.Join(", ", hand.cardsInHand.Select(c => {
+                if (c == null) return "NULL_CARD";
+                if (c.GetCardData() == null) return "NO_DATA";
+                return c.GetCardData().rank.ToString();
+            }));
+
+            log += $"Player {p.playerName} (Seat {p.seatIndex}): {hand.cardsInHand.Count} cards -> [{cardRanks}]\n";
+        }
+        log += "<color=magenta>================================================</color>";
+        Debug.Log(log);
     }
 }

@@ -56,12 +56,23 @@ public class Deck : NetworkBehaviour {
 
     private void UpdateDeckVisuals() {
         if (deckMesh != null && faceRenderer != null) {
+            // Get the visual and physics components to soft-hide them
+            MeshRenderer meshRend = deckMesh.GetComponent<MeshRenderer>();
+            Collider meshColl = deckMesh.GetComponent<Collider>();
+            Collider rootColl = GetComponent<Collider>(); // In case the collider is on the root object
+
             if (netCardCount.Value <= 0) {
-                deckMesh.gameObject.SetActive(false);
-                faceRenderer.gameObject.SetActive(false);
+                // SOFT HIDE: Turn off visuals and physical interactions, but leave the script ALIVE
+                if (meshRend != null) meshRend.enabled = false;
+                if (meshColl != null) meshColl.enabled = false;
+                if (rootColl != null) rootColl.enabled = false;
+                faceRenderer.enabled = false;
             } else {
-                deckMesh.gameObject.SetActive(true);
-                faceRenderer.gameObject.SetActive(true);
+                // TURN BACK ON
+                if (meshRend != null) meshRend.enabled = true;
+                if (meshColl != null) meshColl.enabled = true;
+                if (rootColl != null) rootColl.enabled = true;
+                faceRenderer.enabled = true;
 
                 float heightPercent = Mathf.Clamp01((float)netCardCount.Value / 52f);
                 float currentHeight = Mathf.Max(0.01f, maxDeckHeight * heightPercent);
@@ -115,7 +126,6 @@ public class Deck : NetworkBehaviour {
 
         netObj.SpawnWithOwnership(rpcParams.Receive.SenderClientId);
 
-        // Pass the raw ulong ID, it is physically impossible for this to fail serialization
         SetCardDataClientRpc(netObj.NetworkObjectId, topCardData.suit, topCardData.rank, targetSeatIndex);
     }
 
@@ -145,10 +155,9 @@ public class Deck : NetworkBehaviour {
 
     private IEnumerator WaitAndAssignCard(ulong cardNetworkId, Suit suit, Rank rank, int targetSeatIndex) {
         NetworkObject cardNetObj = null;
-        float timeout = 3.0f; // Give the client 3 seconds to receive the spawn packet
+        float timeout = 3.0f;
 
         while (timeout > 0) {
-            // Check the SpawnManager directly using the raw ulong ID
             if (NetworkManager.Singleton.SpawnManager.SpawnedObjects.TryGetValue(cardNetworkId, out cardNetObj)) {
                 break;
             }
@@ -166,7 +175,6 @@ public class Deck : NetworkBehaviour {
             if (targetSeatIndex >= 0 && targetSeatIndex < GameManager.Instance.allSeats.Count) {
                 PlayerHand targetHand = GameManager.Instance.allSeats[targetSeatIndex];
                 if (targetHand != null) {
-                    // FORCE the hand to be active so its Update() loop runs to slide the card!
                     targetHand.gameObject.SetActive(true);
                     targetHand.AddCard(newCardView);
                 }
