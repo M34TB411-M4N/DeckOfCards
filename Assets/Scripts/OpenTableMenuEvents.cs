@@ -1,6 +1,7 @@
+using Unity.Netcode;
 using UnityEngine;
-using UnityEngine.UIElements;
 using UnityEngine.SceneManagement;
+using UnityEngine.UIElements;
 
 public class OpenTableMenuEvents : MonoBehaviour {
     private UIDocument document;
@@ -21,11 +22,13 @@ public class OpenTableMenuEvents : MonoBehaviour {
     }
 
     private void OnSingleplayerClicked(ClickEvent e) {
-        SceneManager.LoadScene("Table");
-        Debug.Log("single clicked");
+        NetworkManager.Singleton.StartHost();
+        NetworkManager.Singleton.SceneManager.LoadScene("Table", LoadSceneMode.Single);
     }
 
     private void OnMultiplayerGameClicked(ClickEvent e) {
+        NetworkManager.Singleton.StartHost();
+        NetworkManager.Singleton.SceneManager.LoadScene("MultiplayerSettings", LoadSceneMode.Single);
         Debug.Log("multi clicked");
     }
 

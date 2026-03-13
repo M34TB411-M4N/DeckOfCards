@@ -62,7 +62,11 @@ public class GameManager : NetworkBehaviour {
 
     public override void OnNetworkSpawn() {
         if (IsServer) {
-            AssignSeats();
+            // THE FIX: If GoFishManager doesn't exist, we must be in the Sandbox! 
+            // Assign the single-player seat immediately.
+            if (GoFishManager.Instance == null) {
+                AssignSeats();
+            }
         }
 
         netPlayerCount.OnValueChanged += (oldVal, newVal) => UpdateSeatVisibility(newVal);
