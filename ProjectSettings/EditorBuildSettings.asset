@@ -24,7 +24,7 @@ EditorBuildSettings:
     path: Assets/Scenes/GoFishLobby.unity
     guid: 375fcf227ab447647a7f174da7c19fde
   - enabled: 1
-    path: Assets/Scenes/GoFishSettings.unity
+    path: Assets/Scenes/LobbySettings.unity
     guid: 8174af7c91b651348bd2001855ecca74
   m_configObjects:
     com.unity.input.settings.actions: {fileID: -944628639613478452, guid: 052faaac586de48259a63d0c4782560b, type: 3}

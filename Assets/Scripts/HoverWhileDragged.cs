@@ -91,10 +91,12 @@ public class HoverWhileDragged : MonoBehaviour {
             savedStateCaptured = true;
         }
 
-        // --- THE FLAT SNAP FIX ---
-        // Snap the card to lie perfectly flat and kill any existing spin before we freeze it
-        rb.rotation = Quaternion.Euler(0f, 0f, 0f);
-        rb.angularVelocity = Vector3.zero;
+        // THE FIX: Mathematically snap to 0 or 180 to prevent axis bleeding
+        float currentZ = transform.eulerAngles.z;
+        float snappedZ = (currentZ > 90f && currentZ < 270f) ? 180f : 0f;
+
+        // Instantly snap it perfectly flat. 
+        transform.rotation = Quaternion.Euler(0f, 0f, snappedZ);
 
         // Disable gravity and freeze Y + rotation while hovered so solver cannot touch Y
         rb.useGravity = false;

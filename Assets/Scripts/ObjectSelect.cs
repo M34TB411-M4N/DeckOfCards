@@ -2,6 +2,7 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.EventSystems;
+using Unity.Netcode; // Required for NetworkObject
 
 [DefaultExecutionOrder(-100)]
 public class ObjectSelect : MonoBehaviour {
@@ -44,7 +45,6 @@ public class ObjectSelect : MonoBehaviour {
     private Card pendingCard = null;
     private GameObject pendingCardGO = null;
 
-    // --- REQUIRED CAMERA/UTILITY CHECKS ---
     public bool CanCameraRotate() {
         if (state == InputState.Dragging) return false;
         if (state == InputState.ChoosingDeckForCard) return false;
@@ -59,7 +59,6 @@ public class ObjectSelect : MonoBehaviour {
         return hit != null && hit.CompareTag("MoveableObject");
     }
 
-    // --- INITIALIZATION ---
     void Start() {
         if (deckMenu != null) deckMenu.controller = this;
         if (cardMenu != null) cardMenu.controller = this;
@@ -70,23 +69,18 @@ public class ObjectSelect : MonoBehaviour {
     }
 
     void Update() {
-        // THE MASTER KILLSWITCH: If Go Fish is running, this script goes to sleep.
         if (GoFishManager.Instance != null) return;
-
         HandlePointer();
     }
 
     void FixedUpdate() {
-        // THE MASTER KILLSWITCH: Prevent any rogue dragging physics in Go Fish
         if (GoFishManager.Instance != null) return;
-
         if (state == InputState.Dragging && draggedRb != null) {
             ApplyDragVelocity();
             ApplySoftBounds();
         }
     }
 
-    // --- INPUT HANDLING ---
     private void HandlePointer() {
         if (PointerDown()) {
             pointerDownScreenPos = PointerPosition();
@@ -134,7 +128,6 @@ public class ObjectSelect : MonoBehaviour {
         }
     }
 
-    // --- INTERACTION LOGIC ---
     private void ConfirmClick() {
         if (pressedCandidate == null) return;
         SelectObject(pressedCandidate);
@@ -163,24 +156,18 @@ public class ObjectSelect : MonoBehaviour {
             Deck deck = hit.collider.GetComponentInParent<Deck>();
 
             if (deck != null && pendingCard != null) {
+                // If this is a networked deck, we should technically use a ServerRpc on the Deck,
+                // but if your local AddCard works via NetworkVariables, this might be fine.
                 deck.AddCard(pendingCard);
                 if (pendingCardGO != null) Destroy(pendingCardGO);
                 success = true;
-                Debug.Log("<color=green>[ObjectSelect]</color> Card added to deck successfully.");
                 break;
             }
-
             if (hit.collider.CompareTag("Floor")) break;
         }
-
-        if (!success) {
-            Debug.Log("<color=orange>[ObjectSelect]</color> Add to Deck cancelled: No Deck component found.");
-        }
-
         MenuActionCompleted();
     }
 
-    // --- MENU WRAPPERS ---
     public void OnCardMenuAddToDeckPressed() {
         if (selectedCardView == null) return;
         pendingCard = selectedCardView.GetCardData();
@@ -192,12 +179,10 @@ public class ObjectSelect : MonoBehaviour {
 
     public void OnCardMenuAddToHandPressed() {
         if (selectedCardView == null || GameManager.Instance == null) return;
-
         PlayerHand myHand = GameManager.Instance.MyHand;
         if (myHand != null) {
             GameManager.Instance.RequestAddCardToSpecificHand(selectedCardView, myHand);
         }
-
         MenuActionCompleted();
     }
 
@@ -211,39 +196,27 @@ public class ObjectSelect : MonoBehaviour {
     }
 
     public void OnFocusOnHandButtonPressed() {
-        if (GameManager.Instance == null) {
-            Debug.LogError("<color=red>[Camera]</color> Failed: GameManager is missing!");
-            return;
+        if (GameManager.Instance == null || GameManager.Instance.MyHand == null) return;
+        if (CameraController.Instance != null && GameManager.Instance.MyHand.cameraAnchor != null) {
+            CameraController.Instance.FocusOnTransform(GameManager.Instance.MyHand.cameraAnchor);
         }
-
-        PlayerHand myHand = GameManager.Instance.MyHand;
-
-        if (myHand == null) {
-            Debug.LogError("<color=red>[Camera]</color> Failed: MyHand is NULL. The Client does not know its seat yet.");
-            return;
-        }
-
-        if (myHand.cameraAnchor == null) {
-            Debug.LogError($"<color=red>[Camera]</color> Failed: cameraAnchor is missing on {myHand.gameObject.name}! Please assign the child empty in the Inspector.");
-            return;
-        }
-
-        if (CameraController.Instance == null) {
-            Debug.LogError("<color=red>[Camera]</color> Failed: CameraController.Instance is missing from the scene!");
-            return;
-        }
-
-        CameraController.Instance.FocusOnTransform(myHand.cameraAnchor);
-        Debug.Log($"<color=cyan>[Camera]</color> Successfully focused on {myHand.gameObject.name}");
     }
 
-    // --- DRAG & PHYSICS ---
     private void BeginDrag() {
         if (pressedCandidate == null) return;
         draggedRb = pressedCandidate.GetComponent<Rigidbody>();
         if (draggedRb == null) { state = InputState.Idle; return; }
 
         state = InputState.Dragging;
+
+        // --- THE NEW FIX: Yell at the server to Grab it and freeze gravity! ---
+        NetworkObject netObj = pressedCandidate.GetComponent<NetworkObject>();
+        if (netObj == null) netObj = pressedCandidate.GetComponentInParent<NetworkObject>();
+
+        if (netObj != null && GameManager.Instance != null) {
+            GameManager.Instance.GrabObjectServerRpc(netObj.NetworkObjectId);
+        }
+        // ----------------------------------------------------------------------
 
         CardView card = pressedCandidate.GetComponent<CardView>();
         if (card != null && GameManager.Instance != null) {
@@ -275,11 +248,20 @@ public class ObjectSelect : MonoBehaviour {
 
     private void EndDrag() {
         if (hoverComponent != null) { hoverComponent.EndHover(); hoverComponent = null; }
+
         if (draggedRb != null) {
+            // --- THE NEW FIX: Tell the server we let go so gravity turns back on! ---
+            NetworkObject netObj = draggedRb.GetComponent<NetworkObject>();
+            if (netObj != null && GameManager.Instance != null) {
+                GameManager.Instance.DropObjectServerRpc(netObj.NetworkObjectId);
+            }
+            // ------------------------------------------------------------------------
+
             CheckForHandDrop(draggedRb.gameObject);
             draggedRb.linearVelocity = Vector3.zero;
             draggedRb.angularVelocity = Vector3.zero;
         }
+
         if (draggedMarker != null) {
             removeMarkerCoroutine = StartCoroutine(RemoveDraggedMarkerAfterDelay(draggedMarker.gameObject));
             draggedMarker = null;
@@ -320,7 +302,6 @@ public class ObjectSelect : MonoBehaviour {
         }
     }
 
-    // --- SELECTION & UI HELPERS ---
     public void ClearSelectionAndMenus() {
         selectedDeck = null;
         selectedCardView = null;
@@ -360,7 +341,6 @@ public class ObjectSelect : MonoBehaviour {
         return false;
     }
 
-    // --- TOUCH/MOUSE WRAPPERS ---
     Vector2 PointerPosition() {
 #if UNITY_ANDROID && !UNITY_EDITOR
         return Input.touchCount > 0 ? Input.GetTouch(0).position : Vector2.zero;

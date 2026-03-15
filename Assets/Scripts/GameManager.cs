@@ -21,8 +21,10 @@ public class GameManager : NetworkBehaviour {
     public int totalPlayers = 4;
     public int myPlayerIndex = -1;
 
-    // GLOBAL EVENT FOR THE UI TO LISTEN TO
     public event Action OnScoresUpdated;
+
+    // THE FIX: Server memory of who is called what
+    private Dictionary<ulong, string> clientNames = new Dictionary<ulong, string>();
 
     public ulong MyClientId {
         get {
@@ -31,26 +33,28 @@ public class GameManager : NetworkBehaviour {
         }
     }
 
+    private PlayerHand _myHand;
     public PlayerHand MyHand {
         get {
+            if (_myHand != null) return _myHand;
+
             if (myPlayerIndex >= 0 && myPlayerIndex < allSeats.Count) {
-                return allSeats[myPlayerIndex];
+                _myHand = allSeats[myPlayerIndex];
+                return _myHand;
             }
 
-            for (int i = 0; i < allSeats.Count; i++) {
-                if (allSeats[i] != null) {
-                    NetworkObject netObj = allSeats[i].GetComponent<NetworkObject>();
-                    if (netObj != null && netObj.IsSpawned && netObj.OwnerClientId == MyClientId) {
-                        myPlayerIndex = i;
-                        return allSeats[i];
+            if (allSeats != null) {
+                foreach (var seat in allSeats) {
+                    if (seat != null) {
+                        NetworkObject netObj = seat.GetComponent<NetworkObject>();
+                        if (netObj != null && netObj.IsOwner) {
+                            _myHand = seat;
+                            myPlayerIndex = allSeats.IndexOf(seat);
+                            return _myHand;
+                        }
                     }
                 }
             }
-
-            if (!IsServer && myPlayerIndex == -1) {
-                RequestSeatAssignmentServerRpc();
-            }
-
             return null;
         }
     }
@@ -62,15 +66,72 @@ public class GameManager : NetworkBehaviour {
 
     public override void OnNetworkSpawn() {
         if (IsServer) {
-            // THE FIX: If GoFishManager doesn't exist, we must be in the Sandbox! 
-            // Assign the single-player seat immediately.
-            if (GoFishManager.Instance == null) {
-                AssignSeats();
+            // Log the Host's name immediately
+            clientNames[NetworkManager.ServerClientId] = GameSessionData.PlayerName;
+
+            if (FindAnyObjectByType<GoFishManager>() == null) {
+                StartCoroutine(WaitForSandboxPlayersRoutine());
             }
+        } else {
+            // Tell the Server our name, and ask for a seat!
+            RegisterNameServerRpc(GameSessionData.PlayerName);
+            RequestSeatAssignmentServerRpc();
         }
 
         netPlayerCount.OnValueChanged += (oldVal, newVal) => UpdateSeatVisibility(newVal);
         UpdateSeatVisibility(netPlayerCount.Value);
+    }
+
+    // --- NAME SYNCING LOGIC ---
+    [ServerRpc(RequireOwnership = false)]
+    private void RegisterNameServerRpc(string pName, ServerRpcParams rpcParams = default) {
+        clientNames[rpcParams.Receive.SenderClientId] = pName;
+        PushNamesToClients(); // Refresh the scoreboards now that we know their name
+    }
+
+    [ServerRpc(RequireOwnership = false)]
+    private void RequestNameSyncServerRpc() {
+        PushNamesToClients();
+    }
+
+    private void PushNamesToClients() {
+        if (!IsServer) return;
+
+        string[] names = new string[allSeats.Count];
+        names[0] = clientNames.ContainsKey(NetworkManager.ServerClientId) ? clientNames[NetworkManager.ServerClientId] : "Host";
+
+        int seatIndex = 1;
+        foreach (var client in NetworkManager.Singleton.ConnectedClientsList) {
+            if (client.ClientId == NetworkManager.ServerClientId) continue;
+            if (seatIndex < allSeats.Count) {
+                names[seatIndex] = clientNames.ContainsKey(client.ClientId) ? clientNames[client.ClientId] : $"Player {seatIndex + 1}";
+                seatIndex++;
+            }
+        }
+
+        // Send a single formatted string across the network to save bandwidth
+        string joinedNames = string.Join("|", names);
+        SyncNamesClientRpc(joinedNames);
+    }
+
+    [ClientRpc]
+    private void SyncNamesClientRpc(string joinedNames) {
+        string[] names = joinedNames.Split('|');
+        for (int i = 0; i < names.Length && i < playerScores.Count; i++) {
+            if (!string.IsNullOrEmpty(names[i])) {
+                playerScores[i].playerName = names[i];
+            }
+        }
+        OnScoresUpdated?.Invoke();
+    }
+    // --------------------------
+
+    private System.Collections.IEnumerator WaitForSandboxPlayersRoutine() {
+        while (NetworkManager.Singleton.ConnectedClients.Count < GameSessionData.PlayerCount) {
+            yield return new WaitForSeconds(0.5f);
+        }
+        yield return new WaitForSeconds(1.0f);
+        AssignSeats();
     }
 
     public void AssignSeats() {
@@ -122,6 +183,9 @@ public class GameManager : NetworkBehaviour {
 
         netPlayerCount.Value = seatIndex;
         totalPlayers = seatIndex;
+
+        // Push the correct names now that seats are assigned
+        PushNamesToClients();
     }
 
     [ServerRpc(RequireOwnership = false)]
@@ -130,6 +194,7 @@ public class GameManager : NetworkBehaviour {
         for (int i = 0; i < allSeats.Count; i++) {
             if (allSeats[i] != null) {
                 NetworkObject netObj = allSeats[i].GetComponent<NetworkObject>();
+
                 if (netObj != null && netObj.OwnerClientId == senderId) {
                     ClientRpcParams cParams = new ClientRpcParams {
                         Send = new ClientRpcSendParams { TargetClientIds = new ulong[] { senderId } }
@@ -144,6 +209,9 @@ public class GameManager : NetworkBehaviour {
     [ClientRpc]
     private void SetPlayerIndexClientRpc(int assignedIndex, ClientRpcParams rpcParams = default) {
         myPlayerIndex = assignedIndex;
+        if (assignedIndex >= 0 && assignedIndex < allSeats.Count) {
+            _myHand = allSeats[assignedIndex];
+        }
     }
 
     private void UpdateSeatVisibility(int count) {
@@ -153,7 +221,6 @@ public class GameManager : NetworkBehaviour {
             }
         }
 
-        // Populate the scoreboard list dynamically for all clients when seats are assigned
         if (playerScores.Count != count && count > 0) {
             playerScores.Clear();
             for (int i = 0; i < count; i++) {
@@ -163,6 +230,11 @@ public class GameManager : NetworkBehaviour {
                 });
             }
             OnScoresUpdated?.Invoke();
+
+            // When a client builds their default scoreboard, ask the Server for the REAL names
+            if (!IsServer) {
+                RequestNameSyncServerRpc();
+            }
         }
     }
 
@@ -176,8 +248,6 @@ public class GameManager : NetworkBehaviour {
     private void AddScoreClientRpc(int playerIndex, int amount) {
         if (playerIndex >= 0 && playerIndex < playerScores.Count) {
             playerScores[playerIndex].score += amount;
-
-            // Ring the global alarm bell so the UI knows to update!
             OnScoresUpdated?.Invoke();
         }
     }
@@ -244,6 +314,35 @@ public class GameManager : NetworkBehaviour {
 
             foreach (var h in allSeats) {
                 if (h != null && h.cardsInHand.Contains(cv)) h.RemoveCard(cv);
+            }
+        }
+    }
+
+    // --- SANDBOX PHYSICS & OWNERSHIP ROUTERS ---
+    [ServerRpc(RequireOwnership = false)]
+    public void GrabObjectServerRpc(ulong networkObjectId, ServerRpcParams rpcParams = default) {
+        if (NetworkManager.Singleton.SpawnManager.SpawnedObjects.TryGetValue(networkObjectId, out NetworkObject netObj)) {
+            if (netObj.OwnerClientId != rpcParams.Receive.SenderClientId) {
+                netObj.ChangeOwnership(rpcParams.Receive.SenderClientId);
+            }
+            SetObjectKinematicClientRpc(networkObjectId, true);
+        }
+    }
+
+    [ServerRpc(RequireOwnership = false)]
+    public void DropObjectServerRpc(ulong networkObjectId) {
+        SetObjectKinematicClientRpc(networkObjectId, false);
+    }
+
+    [ClientRpc]
+    private void SetObjectKinematicClientRpc(ulong networkObjectId, bool isKinematic) {
+        if (NetworkManager.Singleton.SpawnManager.SpawnedObjects.TryGetValue(networkObjectId, out NetworkObject netObj)) {
+            if (netObj.TryGetComponent<Rigidbody>(out var rb)) {
+                if (netObj.IsOwner) {
+                    rb.isKinematic = false;
+                } else {
+                    rb.isKinematic = isKinematic;
+                }
             }
         }
     }

@@ -27,8 +27,9 @@ public class OpenTableMenuEvents : MonoBehaviour {
     }
 
     private void OnMultiplayerGameClicked(ClickEvent e) {
+        GameSessionData.SelectedMode = GameMode.Sandbox;
         NetworkManager.Singleton.StartHost();
-        NetworkManager.Singleton.SceneManager.LoadScene("MultiplayerSettings", LoadSceneMode.Single);
+        NetworkManager.Singleton.SceneManager.LoadScene("LobbySettings", LoadSceneMode.Single);
         Debug.Log("multi clicked");
     }
 

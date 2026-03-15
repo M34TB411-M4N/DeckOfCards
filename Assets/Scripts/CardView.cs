@@ -1,33 +1,59 @@
 using UnityEngine;
+using Unity.Netcode;
 
-public class CardView : MonoBehaviour {
+public class CardView : NetworkBehaviour {
+    [Header("Network Data")]
+    public NetworkVariable<Suit> netSuit = new NetworkVariable<Suit>(default, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+    public NetworkVariable<Rank> netRank = new NetworkVariable<Rank>(default, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+    public NetworkVariable<int> netTargetHand = new NetworkVariable<int>(-1, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+
     [Header("Data")]
     [SerializeField] private Card card;
     [SerializeField] private Rank rank;
     [SerializeField] private Suit suit;
 
     [Header("Visuals")]
-    [Tooltip("Drag the Card_Face Quad's SpriteRenderer here")]
     public SpriteRenderer faceRenderer;
-
-    [Tooltip("Drag your CardFacePlaceholder sprite here to hide opponent cards!")]
     public Sprite hiddenFaceSprite;
 
     [Header("Prefabs")]
     [SerializeField] private GameObject pilePrefab;
 
-    private bool currentlyHidden = false;
+    private bool currentlyHidden = true;
 
-    public void Initialize(Card card) {
-        this.card = card;
-        this.rank = card.rank;
-        this.suit = card.suit;
+    public override void OnNetworkSpawn() {
+        // Instantly apply data the moment it spawns on the client
+        SyncFromNetwork();
+        HandleHandAssignment();
+
+        // Listen for future changes
+        netSuit.OnValueChanged += (oldVal, newVal) => SyncFromNetwork();
+        netRank.OnValueChanged += (oldVal, newVal) => SyncFromNetwork();
+        netTargetHand.OnValueChanged += (oldVal, newVal) => HandleHandAssignment();
+    }
+
+    private void SyncFromNetwork() {
+        this.suit = netSuit.Value;
+        this.rank = netRank.Value;
+        this.card = new Card(suit, rank);
         UpdateVisuals();
     }
 
-    public Card GetCardData() {
-        return card;
+    // Automatically jumps into the correct hand based on the NetworkVariable!
+    private void HandleHandAssignment() {
+        if (netTargetHand.Value >= 0 && GameManager.Instance != null) {
+            if (netTargetHand.Value < GameManager.Instance.allSeats.Count) {
+                PlayerHand hand = GameManager.Instance.allSeats[netTargetHand.Value];
+                if (hand != null && !hand.cardsInHand.Contains(this)) {
+                    gameObject.tag = "MoveableObject";
+                    hand.gameObject.SetActive(true);
+                    hand.AddCard(this);
+                }
+            }
+        }
     }
+
+    public Card GetCardData() { return card; }
 
     public void SetCardData(Card card) {
         this.card = card;
@@ -37,18 +63,13 @@ public class CardView : MonoBehaviour {
     }
 
     void Update() {
-        // Only run the anti-cheat monitor if Go Fish is actively playing
         if (GoFishManager.Instance == null || GameManager.Instance == null) return;
 
-        // Default to hidden to prevent deck peeking or flying card peeking
         bool shouldBeHidden = true;
-
-        // If the card is physically inside OUR hand list, we are allowed to see it!
         if (GameManager.Instance.MyHand != null && GameManager.Instance.MyHand.cardsInHand.Contains(this)) {
             shouldBeHidden = false;
         }
 
-        // If the visibility state changed this exact frame, trigger the sprite swap
         if (shouldBeHidden != currentlyHidden) {
             currentlyHidden = shouldBeHidden;
             UpdateVisuals();
@@ -56,25 +77,25 @@ public class CardView : MonoBehaviour {
     }
 
     void UpdateVisuals() {
-        if (faceRenderer == null) {
-            Debug.LogWarning($"CardView: No face renderer assigned on {gameObject.name}!");
-            return;
-        }
-
+        if (faceRenderer == null) return;
         if (card == null) return;
 
-        if (currentlyHidden) {
-            // Apply the Anti-Cheat Placeholder Sprite
+        if (currentlyHidden && GoFishManager.Instance != null) {
             if (hiddenFaceSprite != null) {
                 faceRenderer.sprite = hiddenFaceSprite;
+                faceRenderer.color = Color.white;
             } else {
-                // Fallback: Try to load it dynamically if it wasn't assigned in the inspector
                 Sprite loadedPlaceholder = Resources.Load<Sprite>("CardFacePlaceholder");
-                if (loadedPlaceholder != null) faceRenderer.sprite = loadedPlaceholder;
-                else Debug.LogWarning("CardView: Assign a hiddenFaceSprite in the Inspector, or place 'CardFacePlaceholder' in a Resources folder!");
+                if (loadedPlaceholder != null) {
+                    faceRenderer.sprite = loadedPlaceholder;
+                    faceRenderer.color = Color.white;
+                } else {
+                    faceRenderer.sprite = null;
+                    faceRenderer.color = Color.black;
+                }
             }
         } else {
-            // Apply the True Face Sprite
+            faceRenderer.color = Color.white;
             string resourceName = $"CardFaces/{card.suit}_{card.rank}";
             Sprite loadedFace = Resources.Load<Sprite>(resourceName);
 
@@ -86,21 +107,32 @@ public class CardView : MonoBehaviour {
         }
     }
 
-    public void OnClicked() {
-        // Card-specific behavior
-    }
+    public void OnClicked() { }
 
     public void Flip() {
-        transform.Rotate(0f, 0f, 180f, Space.Self);
+        if (IsServer) FlipClientRpc();
+        else if (IsClient) FlipServerRpc();
     }
 
+    [ServerRpc(RequireOwnership = false)]
+    private void FlipServerRpc() => FlipClientRpc();
+
+    [ClientRpc]
+    private void FlipClientRpc() => transform.Rotate(0f, 0f, 180f, Space.Self);
+
     public void ConvertToPile() {
-        // 1. Capture the data and position before this object is destroyed
+        if (IsServer) ExecuteConvertToPile();
+        else if (IsClient) ConvertToPileServerRpc();
+    }
+
+    [ServerRpc(RequireOwnership = false)]
+    private void ConvertToPileServerRpc() => ExecuteConvertToPile();
+
+    private void ExecuteConvertToPile() {
         Card cardData = GetCardData();
         Vector3 spawnPos = transform.position;
         Quaternion spawnRot = transform.rotation;
 
-        // 2. Remove from any hands it might be in
         PlayerHand[] allHands = Object.FindObjectsByType<PlayerHand>(FindObjectsSortMode.None);
         foreach (var hand in allHands) {
             if (hand.cardsInHand.Contains(this)) {
@@ -109,17 +141,19 @@ public class CardView : MonoBehaviour {
             }
         }
 
-        // 3. Spawn the Pile
-        GameObject newPileGO = Object.Instantiate(pilePrefab, spawnPos, spawnRot);
+        GameObject newPileGO = Instantiate(pilePrefab, spawnPos, spawnRot);
         newPileGO.tag = "MoveableObject";
 
-        // 4. Initialize the Pile
+        NetworkObject netObj = newPileGO.GetComponent<NetworkObject>();
+        if (netObj != null) netObj.Spawn();
+
         Pile newPile = newPileGO.GetComponent<Pile>();
         if (newPile != null) {
             var cardList = new System.Collections.Generic.List<Card> { cardData };
             newPile.InitializeWithCards(cardList);
         }
 
-        Object.Destroy(gameObject);
+        if (TryGetComponent<NetworkObject>(out var myNetObj)) myNetObj.Despawn();
+        else Destroy(gameObject);
     }
 }

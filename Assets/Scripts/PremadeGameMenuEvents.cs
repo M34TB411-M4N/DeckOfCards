@@ -33,8 +33,9 @@ public class PremadeGameMenuEvents : MonoBehaviour {
     }
 
     private void OnGoFishClicked(ClickEvent e) {
+        GameSessionData.SelectedMode = GameMode.GoFish;
         NetworkManager.Singleton.StartHost();
-        NetworkManager.Singleton.SceneManager.LoadScene("GoFishSettings", UnityEngine.SceneManagement.LoadSceneMode.Single);
+        NetworkManager.Singleton.SceneManager.LoadScene("LobbySettings", UnityEngine.SceneManagement.LoadSceneMode.Single);
 
         //SceneManager.LoadScene("GoFishSettings");
         //Debug.Log("go fish clicked");

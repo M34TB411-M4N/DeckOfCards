@@ -16,11 +16,8 @@ public class Deck : NetworkBehaviour {
     [SerializeField] private float dealSpeed = 0.15f;
 
     [Header("Thickness & Visuals")]
-    [Tooltip("The Cube mesh representing the body of the deck")]
     [SerializeField] private Transform deckMesh;
-    [Tooltip("The SpriteRenderer on the Quad that acts as the bottom face")]
     [SerializeField] private SpriteRenderer faceRenderer;
-    [Tooltip("How tall the deck is when it has 52 cards")]
     [SerializeField] private float maxDeckHeight = 0.2f;
 
     public int cardCount = 0;
@@ -33,7 +30,7 @@ public class Deck : NetworkBehaviour {
         netBottomRank.OnValueChanged += (oldVal, newVal) => UpdateDeckVisuals();
 
         if (IsServer) {
-            int targetDecks = GoFishSettings.DeckCount > 0 ? GoFishSettings.DeckCount : 1;
+            int targetDecks = GameSessionData.DeckCount > 0 ? GameSessionData.DeckCount : 1;
             CreateStandardDeck(targetDecks);
             Shuffle();
         }
@@ -56,19 +53,16 @@ public class Deck : NetworkBehaviour {
 
     private void UpdateDeckVisuals() {
         if (deckMesh != null && faceRenderer != null) {
-            // Get the visual and physics components to soft-hide them
             MeshRenderer meshRend = deckMesh.GetComponent<MeshRenderer>();
             Collider meshColl = deckMesh.GetComponent<Collider>();
-            Collider rootColl = GetComponent<Collider>(); // In case the collider is on the root object
+            Collider rootColl = GetComponent<Collider>();
 
             if (netCardCount.Value <= 0) {
-                // SOFT HIDE: Turn off visuals and physical interactions, but leave the script ALIVE
                 if (meshRend != null) meshRend.enabled = false;
                 if (meshColl != null) meshColl.enabled = false;
                 if (rootColl != null) rootColl.enabled = false;
                 faceRenderer.enabled = false;
             } else {
-                // TURN BACK ON
                 if (meshRend != null) meshRend.enabled = true;
                 if (meshColl != null) meshColl.enabled = true;
                 if (rootColl != null) rootColl.enabled = true;
@@ -78,11 +72,9 @@ public class Deck : NetworkBehaviour {
                 float currentHeight = Mathf.Max(0.01f, maxDeckHeight * heightPercent);
                 deckMesh.localScale = new Vector3(deckMesh.localScale.x, currentHeight, deckMesh.localScale.z);
 
-                string resourceName = $"Cards/{netBottomSuit.Value}_{netBottomRank.Value}";
+                string resourceName = $"CardFaces/{netBottomSuit.Value}_{netBottomRank.Value}";
                 Sprite loadedFace = Resources.Load<Sprite>(resourceName);
-                if (loadedFace != null) {
-                    faceRenderer.sprite = loadedFace;
-                }
+                if (loadedFace != null) faceRenderer.sprite = loadedFace;
             }
         }
     }
@@ -106,83 +98,93 @@ public class Deck : NetworkBehaviour {
         UpdateServerDeckState();
     }
 
+    private int GetCorrectDrawIndex() {
+        bool isFaceUp = (transform.eulerAngles.z < 90f || transform.eulerAngles.z > 270f);
+        return isFaceUp ? (cards.Count - 1) : 0;
+    }
+
     public void RequestDrawCard() {
         if (GameManager.Instance.MyHand == null) return;
-
         int seatIndex = GameManager.Instance.allSeats.IndexOf(GameManager.Instance.MyHand);
         DrawCardServerRpc(seatIndex);
     }
 
-    [ServerRpc(RequireOwnership = false)]
+[ServerRpc(RequireOwnership = false)]
     private void DrawCardServerRpc(int targetSeatIndex, ServerRpcParams rpcParams = default) {
         if (cards.Count == 0) return;
 
-        Card topCardData = cards[0];
-        cards.RemoveAt(0);
+        int drawIndex = GetCorrectDrawIndex();
+        Card topCardData = cards[drawIndex];
+        cards.RemoveAt(drawIndex);
         UpdateServerDeckState();
 
-        GameObject newCardObj = Instantiate(cardPrefab, drawSpawnPoint.position, Quaternion.identity);
+        GameObject newCardObj = Instantiate(cardPrefab, drawSpawnPoint.position, transform.rotation);
+        
+        // THE FIX: Assign the values BEFORE spawning!
+        CardView cv = newCardObj.GetComponent<CardView>();
+        cv.netSuit.Value = topCardData.suit;
+        cv.netRank.Value = topCardData.rank;
+        cv.netTargetHand.Value = targetSeatIndex;
+
+        // Now spawn it. The payload will safely contain all the data.
         NetworkObject netObj = newCardObj.GetComponent<NetworkObject>();
-
         netObj.SpawnWithOwnership(rpcParams.Receive.SenderClientId);
-
-        SetCardDataClientRpc(netObj.NetworkObjectId, topCardData.suit, topCardData.rank, targetSeatIndex);
     }
 
     public Card ServerDrawCard(PlayerHand targetHand) {
         if (!IsServer || cards.Count == 0 || targetHand == null) return null;
 
-        Card topCardData = cards[0];
-        cards.RemoveAt(0);
+        int drawIndex = GetCorrectDrawIndex();
+        Card topCardData = cards[drawIndex];
+        cards.RemoveAt(drawIndex);
         UpdateServerDeckState();
 
-        GameObject newCardObj = Instantiate(cardPrefab, drawSpawnPoint.position, Quaternion.identity);
+        GameObject newCardObj = Instantiate(cardPrefab, drawSpawnPoint.position, transform.rotation);
+        
+        int seatIndex = GameManager.Instance.allSeats.IndexOf(targetHand);
+
+        // THE FIX: Assign the values BEFORE spawning!
+        CardView cv = newCardObj.GetComponent<CardView>();
+        cv.netSuit.Value = topCardData.suit;
+        cv.netRank.Value = topCardData.rank;
+        cv.netTargetHand.Value = seatIndex;
+
         NetworkObject netObj = newCardObj.GetComponent<NetworkObject>();
         NetworkObject handNetObj = targetHand.GetComponent<NetworkObject>();
-
         netObj.SpawnWithOwnership(handNetObj.OwnerClientId);
-
-        int seatIndex = GameManager.Instance.allSeats.IndexOf(targetHand);
-        SetCardDataClientRpc(netObj.NetworkObjectId, topCardData.suit, topCardData.rank, seatIndex);
 
         return topCardData;
     }
 
-    [ClientRpc]
-    private void SetCardDataClientRpc(ulong cardNetworkId, Suit suit, Rank rank, int targetSeatIndex) {
-        StartCoroutine(WaitAndAssignCard(cardNetworkId, suit, rank, targetSeatIndex));
-    }
+    [ServerRpc(RequireOwnership = false)]
+    private void RemoveTopCardServerRpc() {
+        if (cards == null || cards.Count == 0) return;
 
-    private IEnumerator WaitAndAssignCard(ulong cardNetworkId, Suit suit, Rank rank, int targetSeatIndex) {
-        NetworkObject cardNetObj = null;
-        float timeout = 3.0f;
+        int drawIndex = GetCorrectDrawIndex();
+        Card topCardData = cards[drawIndex];
+        cards.RemoveAt(drawIndex);
+        UpdateServerDeckState();
 
-        while (timeout > 0) {
-            if (NetworkManager.Singleton.SpawnManager.SpawnedObjects.TryGetValue(cardNetworkId, out cardNetObj)) {
-                break;
-            }
-            timeout -= Time.deltaTime;
-            yield return null;
-        }
+        float offsetDistance = cardPrefab.gameObject.transform.localScale.x * 1.1f;
+        Vector3 finalSpawnPos = transform.position + (Vector3.up * 0.2f);
 
-        if (cardNetObj != null) {
-            CardView newCardView = cardNetObj.GetComponent<CardView>();
-            if (newCardView != null) {
-                newCardView.SetCardData(new Card(suit, rank));
-                cardNetObj.gameObject.tag = "MoveableObject";
-            }
+        GameObject newCardGO = Instantiate(cardPrefab, finalSpawnPos, transform.rotation);
+        
+        // THE FIX: Assign the values BEFORE spawning!
+        CardView cv = newCardGO.GetComponent<CardView>();
+        cv.netSuit.Value = topCardData.suit;
+        cv.netRank.Value = topCardData.rank;
+        cv.netTargetHand.Value = -1; // Throw it on the table
 
-            if (targetSeatIndex >= 0 && targetSeatIndex < GameManager.Instance.allSeats.Count) {
-                PlayerHand targetHand = GameManager.Instance.allSeats[targetSeatIndex];
-                if (targetHand != null) {
-                    targetHand.gameObject.SetActive(true);
-                    targetHand.AddCard(newCardView);
-                }
-            }
-        } else {
-            Debug.LogError($"<color=red>[Deck]</color> ClientRpc timed out! Card {cardNetworkId} never spawned on Client.");
+        NetworkObject netObj = newCardGO.GetComponent<NetworkObject>();
+        netObj.Spawn();
+
+        if (newCardGO.TryGetComponent<Rigidbody>(out var rb)) {
+            rb.isKinematic = false;
         }
     }
+
+    public void RemoveTopCard() { RemoveTopCardServerRpc(); }
 
     public void AddCard(Card card) {
         cards.Add(card);
@@ -219,53 +221,6 @@ public class Deck : NetworkBehaviour {
                     ServerDrawCard(seat);
                     yield return new WaitForSeconds(dealSpeed);
                 }
-            }
-        }
-    }
-
-    public void RemoveTopCard() { RemoveTopCardServerRpc(); }
-
-    [ServerRpc(RequireOwnership = false)]
-    private void RemoveTopCardServerRpc() {
-        if (cards == null || cards.Count == 0) return;
-
-        Card topCardData = cards[0];
-        cards.RemoveAt(0);
-        UpdateServerDeckState();
-
-        float offsetDistance = cardPrefab.gameObject.transform.localScale.x * 1.1f;
-        Vector3 finalSpawnPos = transform.position + (Vector3.up * 0.2f);
-
-        GameObject newCardGO = Instantiate(cardPrefab, finalSpawnPos, Quaternion.identity);
-        NetworkObject netObj = newCardGO.GetComponent<NetworkObject>();
-
-        netObj.Spawn();
-        SetTopCardDataClientRpc(netObj.NetworkObjectId, topCardData.suit, topCardData.rank);
-    }
-
-    [ClientRpc]
-    private void SetTopCardDataClientRpc(ulong cardNetworkId, Suit suit, Rank rank) {
-        StartCoroutine(WaitAndAssignTopCard(cardNetworkId, suit, rank));
-    }
-
-    private IEnumerator WaitAndAssignTopCard(ulong cardNetworkId, Suit suit, Rank rank) {
-        NetworkObject cardNetObj = null;
-        float timeout = 3.0f;
-
-        while (timeout > 0) {
-            if (NetworkManager.Singleton.SpawnManager.SpawnedObjects.TryGetValue(cardNetworkId, out cardNetObj)) {
-                break;
-            }
-            timeout -= Time.deltaTime;
-            yield return null;
-        }
-
-        if (cardNetObj != null) {
-            CardView cv = cardNetObj.GetComponent<CardView>();
-            if (cv != null) cv.SetCardData(new Card(suit, rank));
-
-            if (cardNetObj.TryGetComponent<Rigidbody>(out var rb)) {
-                rb.isKinematic = false;
             }
         }
     }

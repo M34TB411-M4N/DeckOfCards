@@ -2434,14 +2434,14 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::GameManager
   ShowTopMostFoldoutHeaderGroup: 1
   allSeats:
-  - {fileID: 346525094}
-  - {fileID: 1052283461}
-  - {fileID: 1911778616}
-  - {fileID: 434265783}
-  - {fileID: 1704584590}
-  - {fileID: 53052847}
-  - {fileID: 2075289975}
-  - {fileID: 1317425215}
+  - {fileID: 530007626}
+  - {fileID: 1016739000}
+  - {fileID: 134199546}
+  - {fileID: 1151663561}
+  - {fileID: 564287595}
+  - {fileID: 1156161283}
+  - {fileID: 590304950}
+  - {fileID: 48588460}
   netPlayerCount:
     m_InternalValue: 0
   playerScores: []
@@ -7063,8 +7063,8 @@ MonoBehaviour:
   lookSensitivity: 0.001
   elevationSpeed: 3
   focusDuration: 0.5
-  objectSelect: {fileID: 0}
-  movementJoystick: {fileID: 0}
+  objectSelect: {fileID: 1782618114}
+  movementJoystick: {fileID: 590128323}
 --- !u!114 &821490718
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -7425,7 +7425,6 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 876606518}
-  - component: {fileID: 876606519}
   m_Layer: 0
   m_Name: PlayerSeats
   m_TagString: Untagged
@@ -7456,18 +7455,6 @@ Transform:
   - {fileID: 48588456}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &876606519
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 876606517}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 9f7f078455317a8479359dc0306c4979, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::MultiplayerOnlyUI
 --- !u!1 &921200068
 GameObject:
   m_ObjectHideFlags: 0
@@ -11672,7 +11659,7 @@ MonoBehaviour:
     callback:
       m_PersistentCalls:
         m_Calls:
-        - m_Target: {fileID: 330585548}
+        - m_Target: {fileID: 821490717}
           m_TargetAssemblyTypeName: CameraController, Assembly-CSharp
           m_MethodName: OnDownButtonDown
           m_Mode: 1
@@ -11688,7 +11675,7 @@ MonoBehaviour:
     callback:
       m_PersistentCalls:
         m_Calls:
-        - m_Target: {fileID: 330585548}
+        - m_Target: {fileID: 821490717}
           m_TargetAssemblyTypeName: CameraController, Assembly-CSharp
           m_MethodName: OnElevationButtonUp
           m_Mode: 1
@@ -12375,7 +12362,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 1682269659211656872, guid: 9906bb83fa6f44647b3b0d5bcad0d6f0, type: 3}
       propertyPath: m_LocalRotation.x
-      value: 1
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 1682269659211656872, guid: 9906bb83fa6f44647b3b0d5bcad0d6f0, type: 3}
       propertyPath: m_LocalRotation.y
@@ -12383,11 +12370,11 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 1682269659211656872, guid: 9906bb83fa6f44647b3b0d5bcad0d6f0, type: 3}
       propertyPath: m_LocalRotation.z
-      value: 0
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 1682269659211656872, guid: 9906bb83fa6f44647b3b0d5bcad0d6f0, type: 3}
       propertyPath: m_LocalEulerAnglesHint.x
-      value: 180
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 1682269659211656872, guid: 9906bb83fa6f44647b3b0d5bcad0d6f0, type: 3}
       propertyPath: m_LocalEulerAnglesHint.y
@@ -12395,7 +12382,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 1682269659211656872, guid: 9906bb83fa6f44647b3b0d5bcad0d6f0, type: 3}
       propertyPath: m_LocalEulerAnglesHint.z
-      value: 0
+      value: 180
       objectReference: {fileID: 0}
     - target: {fileID: 3907516183502525462, guid: 9906bb83fa6f44647b3b0d5bcad0d6f0, type: 3}
       propertyPath: GlobalObjectIdHash
@@ -13373,7 +13360,7 @@ MonoBehaviour:
     callback:
       m_PersistentCalls:
         m_Calls:
-        - m_Target: {fileID: 330585548}
+        - m_Target: {fileID: 821490717}
           m_TargetAssemblyTypeName: CameraController, Assembly-CSharp
           m_MethodName: OnUpButtonDown
           m_Mode: 1
@@ -13389,7 +13376,7 @@ MonoBehaviour:
     callback:
       m_PersistentCalls:
         m_Calls:
-        - m_Target: {fileID: 330585548}
+        - m_Target: {fileID: 821490717}
           m_TargetAssemblyTypeName: CameraController, Assembly-CSharp
           m_MethodName: OnElevationButtonUp
           m_Mode: 1
