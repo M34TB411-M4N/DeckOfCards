@@ -8,9 +8,14 @@ public class CameraController : MonoBehaviour {
 
     [Header("Movement Settings")]
     [SerializeField] private float moveSpeed = 5f;
-    [SerializeField] private float lookSensitivity = 0.15f;
     [SerializeField] private float elevationSpeed = 3f;
     [SerializeField] private float focusDuration = 0.5f;
+
+    [Header("Sensitivity Settings")]
+    [Tooltip("Sensitivity for PC/Mac Mouse turning")]
+    [SerializeField] private float mouseSensitivity = 10f;
+    [Tooltip("Degrees the camera turns for a full screen swipe on Mobile")]
+    [SerializeField] private float touchSensitivity = 300f;
 
     [Header("Input References")]
     [SerializeField] private ObjectSelect objectSelect;
@@ -68,37 +73,12 @@ public class CameraController : MonoBehaviour {
     private void HandleLook() {
         if (objectSelect == null) return;
 
-        // --- EDITOR TESTING (Mouse) ---
-        if (Application.isEditor && !Input.touchSupported) {
-            if (Input.GetMouseButtonDown(0)) {
-                // Use our new custom logic instead of EventSystem.IsPointerOverGameObject
-                if (objectSelect.CanCameraRotate()) {
-                    Debug.Log("<color=olive>[Camera]</color> Rotation Started (Mouse)");
-                    isRotating = true;
-                } else {
-                    Debug.Log("<color=olive>[Camera]</color> Rotation Blocked (Mouse) - Pointer over UI or Object");
-                }
-            }
-
-            if (isRotating && Input.GetMouseButton(0)) {
-                ApplyRotation(Input.GetAxis("Mouse X") * 10f, Input.GetAxis("Mouse Y") * 10f);
-            }
-
-            if (Input.GetMouseButtonUp(0)) {
-                if (isRotating) Debug.Log("<color=olive>[Camera]</color> Rotation Ended (Mouse)");
-                isRotating = false;
-            }
-            return;
-        }
-
         // --- MOBILE TOUCH ---
         if (Input.touchCount > 0) {
             Touch touch = Input.GetTouch(0);
 
             if (touch.phase == TouchPhase.Began) {
-                // Use our new custom logic for mobile as well
                 if (objectSelect.CanCameraRotate()) {
-                    Debug.Log("<color=olive>[Camera]</color> Rotation Started (Touch)");
                     isRotating = true;
                     activeFingerId = touch.fingerId;
                 }
@@ -106,20 +86,39 @@ public class CameraController : MonoBehaviour {
 
             if (isRotating && touch.fingerId == activeFingerId) {
                 if (touch.phase == TouchPhase.Moved) {
-                    ApplyRotation(touch.deltaPosition.x * lookSensitivity, touch.deltaPosition.y * lookSensitivity);
+
+                    // THE FIX: Normalize the pixel movement based on the device's exact screen size!
+                    float normalizedX = touch.deltaPosition.x / Screen.width;
+                    float normalizedY = touch.deltaPosition.y / Screen.height;
+
+                    ApplyRotation(normalizedX * touchSensitivity, normalizedY * touchSensitivity);
                 }
 
                 if (touch.phase == TouchPhase.Ended || touch.phase == TouchPhase.Canceled) {
-                    Debug.Log("<color=olive>[Camera]</color> Rotation Ended (Touch)");
                     isRotating = false;
                     activeFingerId = -1;
                 }
             }
+            // Return here so mobile touches don't accidentally trigger the mouse logic below
+            return;
+        }
+
+        // --- MOUSE (Editor & PC/Mac Builds) ---
+        if (Input.GetMouseButtonDown(0)) {
+            if (objectSelect.CanCameraRotate()) {
+                isRotating = true;
+            }
+        }
+
+        if (isRotating && Input.GetMouseButton(0)) {
+            ApplyRotation(Input.GetAxis("Mouse X") * mouseSensitivity, Input.GetAxis("Mouse Y") * mouseSensitivity);
+        }
+
+        if (Input.GetMouseButtonUp(0)) {
+            isRotating = false;
         }
     }
 
-    // IsOverObject is now redundant because CanCameraRotate handles it, 
-    // but we'll keep the helper method if you need it elsewhere.
     private bool IsOverObject() {
         if (objectSelect == null) return false;
         return objectSelect.IsPointerOverDraggable();

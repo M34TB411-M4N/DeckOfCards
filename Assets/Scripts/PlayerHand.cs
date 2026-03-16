@@ -2,8 +2,12 @@ using System.Collections.Generic;
 using System.Linq;
 using Unity.Netcode;
 using UnityEngine;
+using TMPro;
 
 public class PlayerHand : NetworkBehaviour {
+    [Header("UI")]
+    public TextMeshPro nameTextDisplay;
+
     [Header("Layout Settings")]
     [SerializeField] private float cardWidth = 2.0f;
     [SerializeField] private float padding = 0.1f;
@@ -21,6 +25,12 @@ public class PlayerHand : NetworkBehaviour {
 
     void Update() {
         ArrangeCards();
+    }
+
+    public void UpdateNameText(string newName) {
+        if (nameTextDisplay != null) {
+            nameTextDisplay.text = newName;
+        }
     }
 
     public void AddCard(CardView card) {
@@ -52,7 +62,6 @@ public class PlayerHand : NetworkBehaviour {
         if (cardsInHand.Contains(card)) {
             cardsInHand.Remove(card);
 
-            // THE FIX: Do not turn physics back on if we are transferring cards in Go Fish!
             if (GoFishManager.Instance == null) {
                 if (card.TryGetComponent<Rigidbody>(out var rb)) {
                     rb.isKinematic = false;
@@ -66,6 +75,9 @@ public class PlayerHand : NetworkBehaviour {
     }
 
     private void SortHandByRank() {
+        // THE BULLETPROOF FIX: Clear out any missing/destroyed cards first
+        cardsInHand.RemoveAll(c => c == null);
+
         if (cardsInHand.Count <= 1) return;
         cardsInHand = cardsInHand
             .Where(c => c != null && c.GetCardData() != null)
@@ -74,6 +86,9 @@ public class PlayerHand : NetworkBehaviour {
     }
 
     private void ArrangeCards() {
+        // THE BULLETPROOF FIX: Instantly snap the hand back together if a card was put in the deck
+        cardsInHand.RemoveAll(c => c == null);
+
         int count = cardsInHand.Count;
         if (count == 0) return;
 
@@ -118,7 +133,6 @@ public class PlayerHand : NetworkBehaviour {
     protected override void OnOwnershipChanged(ulong previousOwner, ulong newOwner) {
         if (IsOwner && GameManager.Instance != null) {
             GameManager.Instance.myPlayerIndex = GameManager.Instance.allSeats.IndexOf(this);
-            Debug.Log($"<color=green>[Network]</color> I am Local Player at Seat Index: {GameManager.Instance.myPlayerIndex}");
         }
     }
 }

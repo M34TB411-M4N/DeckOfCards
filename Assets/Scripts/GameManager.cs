@@ -23,7 +23,6 @@ public class GameManager : NetworkBehaviour {
 
     public event Action OnScoresUpdated;
 
-    // THE FIX: Server memory of who is called what
     private Dictionary<ulong, string> clientNames = new Dictionary<ulong, string>();
 
     public ulong MyClientId {
@@ -66,14 +65,12 @@ public class GameManager : NetworkBehaviour {
 
     public override void OnNetworkSpawn() {
         if (IsServer) {
-            // Log the Host's name immediately
             clientNames[NetworkManager.ServerClientId] = GameSessionData.PlayerName;
 
             if (FindAnyObjectByType<GoFishManager>() == null) {
                 StartCoroutine(WaitForSandboxPlayersRoutine());
             }
         } else {
-            // Tell the Server our name, and ask for a seat!
             RegisterNameServerRpc(GameSessionData.PlayerName);
             RequestSeatAssignmentServerRpc();
         }
@@ -86,7 +83,7 @@ public class GameManager : NetworkBehaviour {
     [ServerRpc(RequireOwnership = false)]
     private void RegisterNameServerRpc(string pName, ServerRpcParams rpcParams = default) {
         clientNames[rpcParams.Receive.SenderClientId] = pName;
-        PushNamesToClients(); // Refresh the scoreboards now that we know their name
+        PushNamesToClients();
     }
 
     [ServerRpc(RequireOwnership = false)]
@@ -109,7 +106,6 @@ public class GameManager : NetworkBehaviour {
             }
         }
 
-        // Send a single formatted string across the network to save bandwidth
         string joinedNames = string.Join("|", names);
         SyncNamesClientRpc(joinedNames);
     }
@@ -119,7 +115,13 @@ public class GameManager : NetworkBehaviour {
         string[] names = joinedNames.Split('|');
         for (int i = 0; i < names.Length && i < playerScores.Count; i++) {
             if (!string.IsNullOrEmpty(names[i])) {
+                // 1. Update the scoreboard
                 playerScores[i].playerName = names[i];
+
+                // 2. THE NEW FIX: Update the 3D text floating over the table!
+                if (i < allSeats.Count && allSeats[i] != null) {
+                    allSeats[i].UpdateNameText(names[i]);
+                }
             }
         }
         OnScoresUpdated?.Invoke();
@@ -184,7 +186,6 @@ public class GameManager : NetworkBehaviour {
         netPlayerCount.Value = seatIndex;
         totalPlayers = seatIndex;
 
-        // Push the correct names now that seats are assigned
         PushNamesToClients();
     }
 
@@ -218,6 +219,11 @@ public class GameManager : NetworkBehaviour {
         for (int i = 0; i < allSeats.Count; i++) {
             if (allSeats[i] != null) {
                 allSeats[i].gameObject.SetActive(i < count);
+
+                // If a seat gets turned off (e.g., in a 2 player game), clear its floating name just in case!
+                if (i >= count) {
+                    allSeats[i].UpdateNameText("");
+                }
             }
         }
 
@@ -231,7 +237,6 @@ public class GameManager : NetworkBehaviour {
             }
             OnScoresUpdated?.Invoke();
 
-            // When a client builds their default scoreboard, ask the Server for the REAL names
             if (!IsServer) {
                 RequestNameSyncServerRpc();
             }

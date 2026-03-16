@@ -18,7 +18,7 @@ public class Deck : NetworkBehaviour {
     [Header("Thickness & Visuals")]
     [SerializeField] private Transform deckMesh;
     [SerializeField] private SpriteRenderer faceRenderer;
-    [SerializeField] private float maxDeckHeight = 0.2f;
+    [SerializeField] private float singleCardThickness = 0.0144f;
 
     public int cardCount = 0;
 
@@ -68,8 +68,7 @@ public class Deck : NetworkBehaviour {
                 if (rootColl != null) rootColl.enabled = true;
                 faceRenderer.enabled = true;
 
-                float heightPercent = Mathf.Clamp01((float)netCardCount.Value / 52f);
-                float currentHeight = Mathf.Max(0.01f, maxDeckHeight * heightPercent);
+                float currentHeight = Mathf.Max(0.001f, netCardCount.Value * singleCardThickness);
                 deckMesh.localScale = new Vector3(deckMesh.localScale.x, currentHeight, deckMesh.localScale.z);
 
                 string resourceName = $"CardFaces/{netBottomSuit.Value}_{netBottomRank.Value}";
@@ -98,6 +97,32 @@ public class Deck : NetworkBehaviour {
         UpdateServerDeckState();
     }
 
+    // --- THE NEW FIX: ABSORB CARD SAFELY VIA SERVER ---
+    public void RequestAbsorbCard(ulong cardNetworkId) {
+        AbsorbCardServerRpc(cardNetworkId);
+    }
+
+    [ServerRpc(RequireOwnership = false)]
+    private void AbsorbCardServerRpc(ulong cardNetworkId) {
+        if (NetworkManager.Singleton.SpawnManager.SpawnedObjects.TryGetValue(cardNetworkId, out NetworkObject cardNetObj)) {
+            CardView cv = cardNetObj.GetComponent<CardView>();
+            if (cv != null) {
+                // Read the data and add it to the logical deck list
+                cards.Add(new Card(cv.netSuit.Value, cv.netRank.Value));
+                UpdateServerDeckState();
+
+                // Despawning it officially deletes it across all connected clients!
+                cardNetObj.Despawn();
+            }
+        }
+    }
+    // ---------------------------------------------------
+
+    public void AddCard(Card card) {
+        cards.Add(card);
+        UpdateServerDeckState();
+    }
+
     private int GetCorrectDrawIndex() {
         bool isFaceUp = (transform.eulerAngles.z < 90f || transform.eulerAngles.z > 270f);
         return isFaceUp ? (cards.Count - 1) : 0;
@@ -109,7 +134,7 @@ public class Deck : NetworkBehaviour {
         DrawCardServerRpc(seatIndex);
     }
 
-[ServerRpc(RequireOwnership = false)]
+    [ServerRpc(RequireOwnership = false)]
     private void DrawCardServerRpc(int targetSeatIndex, ServerRpcParams rpcParams = default) {
         if (cards.Count == 0) return;
 
@@ -119,16 +144,14 @@ public class Deck : NetworkBehaviour {
         UpdateServerDeckState();
 
         GameObject newCardObj = Instantiate(cardPrefab, drawSpawnPoint.position, transform.rotation);
-        
-        // THE FIX: Assign the values BEFORE spawning!
+        NetworkObject netObj = newCardObj.GetComponent<NetworkObject>();
+
+        netObj.SpawnWithOwnership(rpcParams.Receive.SenderClientId);
+
         CardView cv = newCardObj.GetComponent<CardView>();
         cv.netSuit.Value = topCardData.suit;
         cv.netRank.Value = topCardData.rank;
         cv.netTargetHand.Value = targetSeatIndex;
-
-        // Now spawn it. The payload will safely contain all the data.
-        NetworkObject netObj = newCardObj.GetComponent<NetworkObject>();
-        netObj.SpawnWithOwnership(rpcParams.Receive.SenderClientId);
     }
 
     public Card ServerDrawCard(PlayerHand targetHand) {
@@ -140,21 +163,22 @@ public class Deck : NetworkBehaviour {
         UpdateServerDeckState();
 
         GameObject newCardObj = Instantiate(cardPrefab, drawSpawnPoint.position, transform.rotation);
-        
+        NetworkObject netObj = newCardObj.GetComponent<NetworkObject>();
+        NetworkObject handNetObj = targetHand.GetComponent<NetworkObject>();
+
+        netObj.SpawnWithOwnership(handNetObj.OwnerClientId);
+
         int seatIndex = GameManager.Instance.allSeats.IndexOf(targetHand);
 
-        // THE FIX: Assign the values BEFORE spawning!
         CardView cv = newCardObj.GetComponent<CardView>();
         cv.netSuit.Value = topCardData.suit;
         cv.netRank.Value = topCardData.rank;
         cv.netTargetHand.Value = seatIndex;
 
-        NetworkObject netObj = newCardObj.GetComponent<NetworkObject>();
-        NetworkObject handNetObj = targetHand.GetComponent<NetworkObject>();
-        netObj.SpawnWithOwnership(handNetObj.OwnerClientId);
-
         return topCardData;
     }
+
+    public void RemoveTopCard() { RemoveTopCardServerRpc(); }
 
     [ServerRpc(RequireOwnership = false)]
     private void RemoveTopCardServerRpc() {
@@ -169,26 +193,17 @@ public class Deck : NetworkBehaviour {
         Vector3 finalSpawnPos = transform.position + (Vector3.up * 0.2f);
 
         GameObject newCardGO = Instantiate(cardPrefab, finalSpawnPos, transform.rotation);
-        
-        // THE FIX: Assign the values BEFORE spawning!
+        NetworkObject netObj = newCardGO.GetComponent<NetworkObject>();
+        netObj.Spawn();
+
         CardView cv = newCardGO.GetComponent<CardView>();
         cv.netSuit.Value = topCardData.suit;
         cv.netRank.Value = topCardData.rank;
-        cv.netTargetHand.Value = -1; // Throw it on the table
-
-        NetworkObject netObj = newCardGO.GetComponent<NetworkObject>();
-        netObj.Spawn();
+        cv.netTargetHand.Value = -1;
 
         if (newCardGO.TryGetComponent<Rigidbody>(out var rb)) {
             rb.isKinematic = false;
         }
-    }
-
-    public void RemoveTopCard() { RemoveTopCardServerRpc(); }
-
-    public void AddCard(Card card) {
-        cards.Add(card);
-        UpdateServerDeckState();
     }
 
     public void Shuffle() {

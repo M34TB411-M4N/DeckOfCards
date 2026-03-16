@@ -2,7 +2,7 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.EventSystems;
-using Unity.Netcode; // Required for NetworkObject
+using Unity.Netcode;
 
 [DefaultExecutionOrder(-100)]
 public class ObjectSelect : MonoBehaviour {
@@ -155,11 +155,14 @@ public class ObjectSelect : MonoBehaviour {
         foreach (var hit in hits) {
             Deck deck = hit.collider.GetComponentInParent<Deck>();
 
-            if (deck != null && pendingCard != null) {
-                // If this is a networked deck, we should technically use a ServerRpc on the Deck,
-                // but if your local AddCard works via NetworkVariables, this might be fine.
-                deck.AddCard(pendingCard);
-                if (pendingCardGO != null) Destroy(pendingCardGO);
+            if (deck != null && pendingCardGO != null) {
+
+                // THE FIX: Securely pass the ID of the object to the server!
+                NetworkObject cardNetObj = pendingCardGO.GetComponent<NetworkObject>();
+                if (cardNetObj != null) {
+                    deck.RequestAbsorbCard(cardNetObj.NetworkObjectId);
+                }
+
                 success = true;
                 break;
             }
@@ -209,14 +212,12 @@ public class ObjectSelect : MonoBehaviour {
 
         state = InputState.Dragging;
 
-        // --- THE NEW FIX: Yell at the server to Grab it and freeze gravity! ---
         NetworkObject netObj = pressedCandidate.GetComponent<NetworkObject>();
         if (netObj == null) netObj = pressedCandidate.GetComponentInParent<NetworkObject>();
 
         if (netObj != null && GameManager.Instance != null) {
             GameManager.Instance.GrabObjectServerRpc(netObj.NetworkObjectId);
         }
-        // ----------------------------------------------------------------------
 
         CardView card = pressedCandidate.GetComponent<CardView>();
         if (card != null && GameManager.Instance != null) {
@@ -250,12 +251,10 @@ public class ObjectSelect : MonoBehaviour {
         if (hoverComponent != null) { hoverComponent.EndHover(); hoverComponent = null; }
 
         if (draggedRb != null) {
-            // --- THE NEW FIX: Tell the server we let go so gravity turns back on! ---
             NetworkObject netObj = draggedRb.GetComponent<NetworkObject>();
             if (netObj != null && GameManager.Instance != null) {
                 GameManager.Instance.DropObjectServerRpc(netObj.NetworkObjectId);
             }
-            // ------------------------------------------------------------------------
 
             CheckForHandDrop(draggedRb.gameObject);
             draggedRb.linearVelocity = Vector3.zero;
