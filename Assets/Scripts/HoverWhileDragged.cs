@@ -3,6 +3,10 @@ using UnityEngine;
 [RequireComponent(typeof(Rigidbody))]
 [RequireComponent(typeof(Collider))]
 public class HoverWhileDragged : MonoBehaviour {
+    [Header("Debugging")]
+    [Tooltip("Turn this on to spam the console with exactly what this script is hitting!")]
+    [SerializeField] private bool enableVerboseLogging = false;
+
     [Header("Hover Settings")]
     [Tooltip("Base hover height above the top surface of whatever is below this object.")]
     [SerializeField] private float hoverHeight = 5f;
@@ -21,6 +25,10 @@ public class HoverWhileDragged : MonoBehaviour {
 
     // how far down to look in case there's a big drop (safety)
     [SerializeField] private float maxLookDistance = 50f;
+
+    [Header("Safety Fallbacks")]
+    [Tooltip("If the card is dragged completely off the table into the abyss, assume the floor is at this Y level.")]
+    [SerializeField] private float fallbackFloorY = 0f;
 
     private Rigidbody rb;
     private Collider col;
@@ -74,16 +82,17 @@ public class HoverWhileDragged : MonoBehaviour {
         float newY = Mathf.Lerp(rb.position.y, cachedTargetY, responsiveness * Time.fixedDeltaTime);
         Vector3 newPos = new Vector3(rb.position.x, newY, rb.position.z);
         rb.MovePosition(newPos);
+
+        if (enableVerboseLogging && newY > 10f) {
+            Debug.LogWarning($"<color=red>[Hover Warning]</color> {gameObject.name} is flying very high! Current Y: {newY}, Target Y: {cachedTargetY}");
+        }
     }
 
-    /// <summary>
-    /// Call when the object begins being dragged.
-    /// </summary>
     public void BeginHover() {
-        if (hovering)
-            return;
-
+        if (hovering) return;
         hovering = true;
+
+        if (enableVerboseLogging) Debug.Log($"<color=magenta>[Hover Start]</color> {gameObject.name} picked up.");
 
         if (!savedStateCaptured) {
             savedUseGravity = rb.useGravity;
@@ -91,61 +100,46 @@ public class HoverWhileDragged : MonoBehaviour {
             savedStateCaptured = true;
         }
 
-        // THE FIX: Mathematically snap to 0 or 180 to prevent axis bleeding
         float currentZ = transform.eulerAngles.z;
         float snappedZ = (currentZ > 90f && currentZ < 270f) ? 180f : 0f;
-
-        // Instantly snap it perfectly flat. 
         transform.rotation = Quaternion.Euler(0f, 0f, snappedZ);
 
-        // Disable gravity and freeze Y + rotation while hovered so solver cannot touch Y
         rb.useGravity = false;
         rb.constraints = savedConstraints | RigidbodyConstraints.FreezeRotation;
 
-        // compute initial target immediately
         RecomputeHoverTarget();
         lastLateralPosition = rb.position;
         timeSinceLastUpdate = 0f;
     }
 
-    /// <summary>
-    /// Call when the object stops being dragged.
-    /// </summary>
     public void EndHover() {
-        if (!hovering)
-            return;
-
+        if (!hovering) return;
         hovering = false;
 
-        // Restore saved state (only if we captured it)
+        if (enableVerboseLogging) Debug.Log($"<color=magenta>[Hover End]</color> {gameObject.name} dropped.");
+
         if (savedStateCaptured) {
             rb.constraints = savedConstraints;
             rb.useGravity = savedUseGravity;
             savedStateCaptured = false;
         } else {
-            // Safe fallback
             rb.constraints = RigidbodyConstraints.None;
             rb.useGravity = true;
         }
 
-        // small downward nudge so gravity starts affecting the object immediately
         Vector3 v = rb.linearVelocity;
         v.y = -10f;
         rb.linearVelocity = v;
     }
 
     private void RecomputeHoverTarget() {
+        if (enableVerboseLogging) Debug.Log("<color=yellow>--- Recomputing Hover Target ---</color>");
         Bounds b = col.bounds;
 
-        // X/Z extents slightly reduced to avoid edge self-hits
         float halfX = Mathf.Max(0.01f, b.extents.x * 0.95f);
         float halfZ = Mathf.Max(0.01f, b.extents.z * 0.95f);
-
-        // how far down we search (include base hover + object height + cushion)
         float searchDistance = hoverHeight + b.size.y + maxLookDistance;
 
-        // Build an OverlapBox that extends downward from just below the object's bottom
-        // Center it halfway down the search distance below b.min.y
         float boxHalfY = Mathf.Max(0.1f, searchDistance * 0.5f);
         Vector3 boxCenter = new Vector3(b.center.x, b.min.y - boxHalfY, b.center.z);
         Vector3 boxHalfExtents = new Vector3(halfX, boxHalfY, halfZ);
@@ -155,16 +149,13 @@ public class HoverWhileDragged : MonoBehaviour {
         float highestTopY = float.NegativeInfinity;
         Collider chosen = null;
 
-        // process overlap hits
         if (hits != null && hits.Length > 0) {
             foreach (var c in hits) {
-                if (c == col) // ignore self
-                    continue;
-                // ignore if attached to same rigidbody
-                if (c.attachedRigidbody != null && c.attachedRigidbody == rb)
-                    continue;
+                if (c == col) continue;
+                if (c.attachedRigidbody != null && c.attachedRigidbody == rb) continue;
 
-                // get top y from bounds (robust)
+                if (enableVerboseLogging) Debug.Log($"<color=cyan>[OverlapBox Hit]</color> Found: {c.gameObject.name} (Layer: {LayerMask.LayerToName(c.gameObject.layer)})");
+
                 float topY = c.bounds.max.y;
                 if (topY > highestTopY) {
                     highestTopY = topY;
@@ -173,43 +164,62 @@ public class HoverWhileDragged : MonoBehaviour {
             }
         }
 
-        // if OverlapBox found something, set target based on that
         if (chosen != null) {
             cachedTargetY = highestTopY + hoverHeight + b.extents.y;
             lastSurfaceCollider = chosen;
+            if (enableVerboseLogging) Debug.Log($"<color=green>[Hover Success]</color> Box locked onto {chosen.name}. Target Y set to {cachedTargetY}");
             return;
         }
 
-        // Otherwise, fallback to a downward raycast from center (will detect table or distant surface)
+        if (enableVerboseLogging) Debug.Log("<color=orange>[Hover Info]</color> OverlapBox found nothing valid. Firing downward RaycastAll...");
+
+        // THE FIX: Use RaycastAll so we can filter out the card itself!
         Vector3 rayOrigin = new Vector3(b.center.x, b.center.y + 0.1f, b.center.z);
-        if (Physics.Raycast(rayOrigin, Vector3.down, out RaycastHit rayHit, searchDistance + 0.5f, hoverSurfaceMask, QueryTriggerInteraction.Ignore)) {
-            // Use either the collider bounds top (if collider has reasonable bounds) or the actual hit point
-            Collider rc = rayHit.collider;
-            float topY = rc.bounds.max.y;
+        RaycastHit[] rayHits = Physics.RaycastAll(rayOrigin, Vector3.down, searchDistance + 0.5f, hoverSurfaceMask, QueryTriggerInteraction.Ignore);
 
-            // if hit point is higher than bounds.max.y use hit.point.y (rare cases)
-            if (rayHit.point.y > topY + 0.001f)
-                topY = rayHit.point.y;
+        float highestRayY = float.NegativeInfinity;
+        Collider chosenRayCol = null;
 
-            cachedTargetY = topY + hoverHeight + b.extents.y;
-            lastSurfaceCollider = rc;
+        if (rayHits != null && rayHits.Length > 0) {
+            foreach (var hit in rayHits) {
+                // IGNORE OURSELVES!
+                if (hit.collider == col) continue;
+                if (hit.collider.attachedRigidbody != null && hit.collider.attachedRigidbody == rb) continue;
+
+                if (enableVerboseLogging) Debug.Log($"<color=cyan>[Raycast Hit]</color> Hit: {hit.collider.gameObject.name} (Layer: {LayerMask.LayerToName(hit.collider.gameObject.layer)})");
+
+                float topY = hit.collider.bounds.max.y;
+                if (hit.point.y > topY + 0.001f) topY = hit.point.y;
+
+                if (topY > highestRayY) {
+                    highestRayY = topY;
+                    chosenRayCol = hit.collider;
+                }
+            }
+        }
+
+        if (chosenRayCol != null) {
+            cachedTargetY = highestRayY + hoverHeight + b.extents.y;
+            lastSurfaceCollider = chosenRayCol;
+            if (enableVerboseLogging) Debug.Log($"<color=green>[Hover Success]</color> Raycast locked onto {chosenRayCol.name}. Target Y set to {cachedTargetY}");
             return;
         }
+
+        // The Abyss Fallback
+        cachedTargetY = fallbackFloorY + hoverHeight + b.extents.y;
+        lastSurfaceCollider = null;
+        if (enableVerboseLogging) Debug.Log($"<color=red>[Hover Fallback]</color> Hit absolutely nothing! Engaging Abyss Fallback. Target Y set to {cachedTargetY}");
     }
 
     void OnDrawGizmosSelected() {
-        if (col == null)
-            return;
-
+        if (col == null) return;
         Bounds b = col.bounds;
-
         float halfX = Mathf.Max(0.01f, b.extents.x * 0.95f);
         float halfZ = Mathf.Max(0.01f, b.extents.z * 0.95f);
         float searchDistance = hoverHeight + b.size.y + maxLookDistance;
         float boxHalfY = Mathf.Max(0.1f, searchDistance * 0.5f);
         Vector3 boxCenter = new Vector3(b.center.x, b.min.y - boxHalfY, b.center.z);
         Vector3 boxSize = new Vector3(halfX * 2f, boxHalfY * 2f, halfZ * 2f);
-
         Gizmos.color = Color.cyan;
         Gizmos.DrawWireCube(boxCenter, boxSize);
     }

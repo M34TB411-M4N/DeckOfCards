@@ -1349,7 +1349,10 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: New Text
+  m_text: 'Open Table Rules
+
+
+    There are no rules. Do whatever you want.'
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
   m_sharedMaterial: {fileID: 2180264, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
@@ -3197,7 +3200,7 @@ GameObject:
   - component: {fileID: 375471848}
   - component: {fileID: 375471850}
   - component: {fileID: 375471849}
-  m_Layer: 0
+  m_Layer: 2
   m_Name: WallEast
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -3213,7 +3216,7 @@ Transform:
   m_GameObject: {fileID: 375471847}
   serializedVersion: 2
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: 20, y: 15, z: 0}
+  m_LocalPosition: {x: 20, y: 19, z: 0}
   m_LocalScale: {x: 1, y: 40, z: 40}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -6740,7 +6743,7 @@ GameObject:
   - component: {fileID: 605262884}
   - component: {fileID: 605262886}
   - component: {fileID: 605262885}
-  m_Layer: 0
+  m_Layer: 2
   m_Name: WallWest
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -6756,7 +6759,7 @@ Transform:
   m_GameObject: {fileID: 605262883}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 1, z: 0, w: 0}
-  m_LocalPosition: {x: -20, y: 15, z: 0}
+  m_LocalPosition: {x: -20, y: 19, z: 0}
   m_LocalScale: {x: 1, y: 40, z: 40}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -8541,7 +8544,7 @@ GameObject:
   - component: {fileID: 892663763}
   - component: {fileID: 892663765}
   - component: {fileID: 892663764}
-  m_Layer: 0
+  m_Layer: 2
   m_Name: WallNorth
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -8557,7 +8560,7 @@ Transform:
   m_GameObject: {fileID: 892663762}
   serializedVersion: 2
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: 0, y: 15, z: -20}
+  m_LocalPosition: {x: 0, y: 19, z: -20}
   m_LocalScale: {x: 40, y: 40, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -10261,7 +10264,7 @@ GameObject:
   - component: {fileID: 1201446213}
   - component: {fileID: 1201446215}
   - component: {fileID: 1201446214}
-  m_Layer: 0
+  m_Layer: 2
   m_Name: WallDown
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -10277,7 +10280,7 @@ Transform:
   m_GameObject: {fileID: 1201446212}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 1, z: 0, w: 0}
-  m_LocalPosition: {x: 0, y: -5, z: 0}
+  m_LocalPosition: {x: 0, y: -1, z: 0}
   m_LocalScale: {x: 40, y: 1, z: 40}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -10998,7 +11001,7 @@ GameObject:
   - component: {fileID: 1352417454}
   - component: {fileID: 1352417456}
   - component: {fileID: 1352417455}
-  m_Layer: 0
+  m_Layer: 2
   m_Name: WallSouth
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -11014,7 +11017,7 @@ Transform:
   m_GameObject: {fileID: 1352417453}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 1, z: 0, w: 0}
-  m_LocalPosition: {x: 0, y: 15, z: 20}
+  m_LocalPosition: {x: 0, y: 19, z: 20}
   m_LocalScale: {x: 40, y: 40, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -15663,7 +15666,7 @@ GameObject:
   - component: {fileID: 2101837719}
   - component: {fileID: 2101837721}
   - component: {fileID: 2101837720}
-  m_Layer: 0
+  m_Layer: 2
   m_Name: WallUp
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -15679,7 +15682,7 @@ Transform:
   m_GameObject: {fileID: 2101837718}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 1, z: 0, w: 0}
-  m_LocalPosition: {x: 0, y: 35, z: 0}
+  m_LocalPosition: {x: 0, y: 39, z: 0}
   m_LocalScale: {x: 40, y: 1, z: 40}
   m_ConstrainProportionsScale: 0
   m_Children: []

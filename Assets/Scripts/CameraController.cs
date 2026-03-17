@@ -87,7 +87,6 @@ public class CameraController : MonoBehaviour {
             if (isRotating && touch.fingerId == activeFingerId) {
                 if (touch.phase == TouchPhase.Moved) {
 
-                    // THE FIX: Normalize the pixel movement based on the device's exact screen size!
                     float normalizedX = touch.deltaPosition.x / Screen.width;
                     float normalizedY = touch.deltaPosition.y / Screen.height;
 
@@ -99,7 +98,6 @@ public class CameraController : MonoBehaviour {
                     activeFingerId = -1;
                 }
             }
-            // Return here so mobile touches don't accidentally trigger the mouse logic below
             return;
         }
 
@@ -119,11 +117,6 @@ public class CameraController : MonoBehaviour {
         }
     }
 
-    private bool IsOverObject() {
-        if (objectSelect == null) return false;
-        return objectSelect.IsPointerOverDraggable();
-    }
-
     private void ApplyRotation(float x, float y) {
         yaw -= x;
         pitch += y;
@@ -131,17 +124,25 @@ public class CameraController : MonoBehaviour {
         transform.localRotation = Quaternion.Euler(pitch, yaw, 0f);
     }
 
+    // --- THE FIX: Pitch-Independent Movement ---
     private void ApplyMovement() {
         if (moveInput == Vector3.zero && elevationInput == 0) return;
 
-        Vector3 direction = (transform.forward * moveInput.z) + (transform.right * moveInput.x);
-        direction.y = 0;
+        // 1. Create a perfectly flat rotation using ONLY the camera's left/right yaw
+        Quaternion flatRotation = Quaternion.Euler(0f, yaw, 0f);
 
-        float currentHorizontalSpeed = direction.magnitude * moveSpeed;
+        // 2. Derive true horizontal forward/right vectors from that flat rotation
+        Vector3 flatForward = flatRotation * Vector3.forward;
+        Vector3 flatRight = flatRotation * Vector3.right;
+
+        // 3. Apply the joystick inputs to our new flat vectors
+        Vector3 direction = (flatForward * moveInput.z) + (flatRight * moveInput.x);
         Vector3 elevation = Vector3.up * elevationInput * elevationSpeed;
 
-        transform.position += (direction.normalized * currentHorizontalSpeed + elevation) * Time.deltaTime;
+        // Apply it all! (direction magnitude is tied purely to how hard they push the joystick)
+        transform.position += (direction * moveSpeed + elevation) * Time.deltaTime;
     }
+    // ------------------------------------------
 
     public void OnUpButtonDown() => elevationInput = 1f;
     public void OnDownButtonDown() => elevationInput = -1f;

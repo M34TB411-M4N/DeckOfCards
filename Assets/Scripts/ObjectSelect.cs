@@ -157,7 +157,6 @@ public class ObjectSelect : MonoBehaviour {
 
             if (deck != null && pendingCardGO != null) {
 
-                // THE FIX: Securely pass the ID of the object to the server!
                 NetworkObject cardNetObj = pendingCardGO.GetComponent<NetworkObject>();
                 if (cardNetObj != null) {
                     deck.RequestAbsorbCard(cardNetObj.NetworkObjectId);
@@ -232,20 +231,31 @@ public class ObjectSelect : MonoBehaviour {
         if (removeMarkerCoroutine != null) StopCoroutine(removeMarkerCoroutine);
     }
 
+    // --- THE FIX: Raycast to the Table, not the Object ---
     private void ApplyDragVelocity() {
-        Plane tablePlane = new Plane(Vector3.up, new Vector3(0, draggedRb.position.y, 0));
+        // Find the top surface of the table (default to 0 if no floor collider exists)
+        float tableHeight = tableCollider != null ? tableCollider.bounds.max.y : 0f;
+        Plane tablePlane = new Plane(Vector3.up, new Vector3(0, tableHeight, 0));
+
         Ray ray = Camera.main.ScreenPointToRay(PointerPosition());
         if (tablePlane.Raycast(ray, out float distance)) {
+            // Target is exactly where the mouse pointer intersects the table surface
             Vector3 target = ray.GetPoint(distance);
+
+            // Only pull horizontally! Let your Hover component handle the vertical floating.
             Vector3 toTarget = target - draggedRb.position;
             toTarget.y = 0f;
+
             Vector3 desired = toTarget * dragResponsiveness;
             if (desired.magnitude > maxDragSpeed) desired = desired.normalized * maxDragSpeed;
+
             Vector3 v = draggedRb.linearVelocity;
-            v.x = desired.x; v.z = desired.z;
+            v.x = desired.x;
+            v.z = desired.z;
             draggedRb.linearVelocity = v;
         }
     }
+    // ---------------------------------------------------
 
     private void EndDrag() {
         if (hoverComponent != null) { hoverComponent.EndHover(); hoverComponent = null; }

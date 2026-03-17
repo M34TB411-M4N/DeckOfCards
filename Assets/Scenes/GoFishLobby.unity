@@ -765,7 +765,25 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: New Text
+  m_text: "Go Fish Rules\n\nEach player is dealt 7 cards\nThe first player is chosen
+    randomly\nPlayers take turns asking each other for cards of a certain rank\nWhen
+    it becomes a players turn they must select another player (click on their hand)
+    and then ask for a certain rank of cards.\nIf that player has any cards of that
+    rank they must give them all to the asking player\nIf the player whose turn it
+    is has a book(4)/pair(2) of all the same rank, they score that pair\nThose 2
+    or 4 cards are taken out of their hand and set aside and their score increases
+    by one.\nThey then get to go again and ask the same player or another player
+    for a rank in their hand.\nIf those player does not have any of the asked for
+    rank in their hand they say \"Go FIsh\" and the asking player draws a card.\nIf
+    a player draws a card they didn't ask for that creates a book or a pair, those
+    cards are scored and removed from hand, and then it's the next players turn.\nIf
+    the card they drew was the card they were asking for then they got what they
+    wanted and get to go again, as if they got a card from an opponents hand. That
+    drawn rank is also scored.\nIf at any point a player runs out of cards in hand
+    they draw 5 cards, or if there is less than 5 cards in the deck, they draw what's
+    left. \nIf the deck is empty and you have no cards in hand your turn ends.\nThe
+    game ends when all hands and the deck are empty.\nThe player with the highest
+    score at the end wins. "
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
   m_sharedMaterial: {fileID: 2180264, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
@@ -989,7 +1007,7 @@ GameObject:
   - component: {fileID: 200396930}
   - component: {fileID: 200396932}
   - component: {fileID: 200396931}
-  m_Layer: 0
+  m_Layer: 2
   m_Name: WallNorth
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -1005,7 +1023,7 @@ Transform:
   m_GameObject: {fileID: 200396929}
   serializedVersion: 2
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: 0, y: 15, z: -20}
+  m_LocalPosition: {x: 0, y: 19, z: -20}
   m_LocalScale: {x: 40, y: 40, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -9562,7 +9580,7 @@ GameObject:
   - component: {fileID: 1088432763}
   - component: {fileID: 1088432765}
   - component: {fileID: 1088432764}
-  m_Layer: 0
+  m_Layer: 2
   m_Name: WallSouth
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -9578,7 +9596,7 @@ Transform:
   m_GameObject: {fileID: 1088432762}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 1, z: 0, w: 0}
-  m_LocalPosition: {x: 0, y: 15, z: 20}
+  m_LocalPosition: {x: 0, y: 19, z: 20}
   m_LocalScale: {x: 40, y: 40, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -9624,7 +9642,7 @@ GameObject:
   - component: {fileID: 1093618312}
   - component: {fileID: 1093618314}
   - component: {fileID: 1093618313}
-  m_Layer: 0
+  m_Layer: 2
   m_Name: WallWest
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -9640,7 +9658,7 @@ Transform:
   m_GameObject: {fileID: 1093618311}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 1, z: 0, w: 0}
-  m_LocalPosition: {x: -20, y: 15, z: 0}
+  m_LocalPosition: {x: -20, y: 19, z: 0}
   m_LocalScale: {x: 1, y: 40, z: 40}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -11361,7 +11379,7 @@ GameObject:
   - component: {fileID: 1357049677}
   - component: {fileID: 1357049679}
   - component: {fileID: 1357049678}
-  m_Layer: 0
+  m_Layer: 2
   m_Name: WallEast
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -11377,7 +11395,7 @@ Transform:
   m_GameObject: {fileID: 1357049676}
   serializedVersion: 2
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: 20, y: 15, z: 0}
+  m_LocalPosition: {x: 20, y: 19, z: 0}
   m_LocalScale: {x: 1, y: 40, z: 40}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -12558,7 +12576,7 @@ GameObject:
   - component: {fileID: 1537828710}
   - component: {fileID: 1537828712}
   - component: {fileID: 1537828711}
-  m_Layer: 0
+  m_Layer: 2
   m_Name: WallUp
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -12574,7 +12592,7 @@ Transform:
   m_GameObject: {fileID: 1537828709}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 1, z: 0, w: 0}
-  m_LocalPosition: {x: 0, y: 35, z: 0}
+  m_LocalPosition: {x: 0, y: 39, z: 0}
   m_LocalScale: {x: 40, y: 1, z: 40}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -14585,7 +14603,7 @@ GameObject:
   - component: {fileID: 1940200877}
   - component: {fileID: 1940200879}
   - component: {fileID: 1940200878}
-  m_Layer: 0
+  m_Layer: 2
   m_Name: WallDown
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -14601,7 +14619,7 @@ Transform:
   m_GameObject: {fileID: 1940200876}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 1, z: 0, w: 0}
-  m_LocalPosition: {x: 0, y: -5, z: 0}
+  m_LocalPosition: {x: 0, y: -1, z: 0}
   m_LocalScale: {x: 40, y: 1, z: 40}
   m_ConstrainProportionsScale: 0
   m_Children: []

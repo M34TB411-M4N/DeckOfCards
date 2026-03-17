@@ -1,3 +1,4 @@
+using Unity.Netcode;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
@@ -78,7 +79,18 @@ public class PauseMenu : MonoBehaviour {
 
     public void OnLeaveGamePressed() {
         Time.timeScale = 1f; // Always reset time before changing scenes!
-        SceneManager.LoadScene("MainMenu");
+        if (NetworkManager.Singleton != null && NetworkManager.Singleton.IsListening) {
+
+            // 2. Sever all connections and kill the server/client
+            NetworkManager.Singleton.Shutdown();
+
+            // 3. (Optional but recommended) Destroy the NetworkManager object completely 
+            // to ensure a 100% clean slate the next time they click "Host" or "Join"
+            Destroy(NetworkManager.Singleton.gameObject);
+        }
+
+        // 4. Now it is safe to load the Main Menu!
+        SceneManager.LoadScene("MainMenu"); // Replace with your actual Main Menu scene name
     }
 
     private Vector3 CalculateSpawnPosition() {

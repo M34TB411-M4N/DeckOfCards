@@ -159,12 +159,20 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 47760491177da4b46abe465fff948afb, type: 3}
   m_Name: 
   m_EditorClassIdentifier: '::'
+  ShowTopMostFoldoutHeaderGroup: 1
+  netSuit:
+    m_InternalValue: 0
+  netRank:
+    m_InternalValue: 0
+  netTargetHand:
+    m_InternalValue: -1
   card:
     suit: 0
     rank: 0
   rank: 0
   suit: 3
   faceRenderer: {fileID: 0}
+  hiddenFaceSprite: {fileID: 0}
   pilePrefab: {fileID: 2917818905663290176, guid: 844e5ef90a8f01145999c0112a039154, type: 3}
 --- !u!114 &-6571968735660500594
 MonoBehaviour:
@@ -191,6 +199,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: aa09cf60674d11549b983c5df6ebc101, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::HoverWhileDragged
+  enableVerboseLogging: 1
   hoverHeight: 3
   responsiveness: 20
   hoverSurfaceMask:
@@ -199,6 +208,7 @@ MonoBehaviour:
   lateralUpdateThreshold: 0.05
   updateInterval: 0.08
   maxLookDistance: 50
+  fallbackFloorY: 0
 --- !u!114 &5933430441945058622
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -428,7 +438,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d5a57f767e5e46a458fc5d3c628d0cbb, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Unity.Netcode.Runtime::Unity.Netcode.NetworkObject
-  GlobalObjectIdHash: 805146211
+  GlobalObjectIdHash: 1786479987
   InScenePlacedSourceGlobalObjectIdHash: 0
   DeferredDespawnTick: 0
   Ownership: 1

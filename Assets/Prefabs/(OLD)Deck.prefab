@@ -132,7 +132,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d5a57f767e5e46a458fc5d3c628d0cbb, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Unity.Netcode.Runtime::Unity.Netcode.NetworkObject
-  GlobalObjectIdHash: 2707553561
+  GlobalObjectIdHash: 4057512353
   InScenePlacedSourceGlobalObjectIdHash: 0
   DeferredDespawnTick: 0
   Ownership: 1
@@ -160,10 +160,17 @@ MonoBehaviour:
   ShowTopMostFoldoutHeaderGroup: 1
   netCardCount:
     m_InternalValue: 0
+  netBottomSuit:
+    m_InternalValue: 0
+  netBottomRank:
+    m_InternalValue: 0
   cards: []
   cardPrefab: {fileID: 9113979296879819522, guid: 01a4531c10517e84880ee7b21a5b39ca, type: 3}
   drawSpawnPoint: {fileID: 5373757290803548999, guid: 01a4531c10517e84880ee7b21a5b39ca, type: 3}
   dealSpeed: 0.15
+  deckMesh: {fileID: 0}
+  faceRenderer: {fileID: 0}
+  singleCardThickness: 0.0144
   cardCount: 0
 --- !u!54 &-7393578911156863217
 Rigidbody:
@@ -217,6 +224,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: aa09cf60674d11549b983c5df6ebc101, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::HoverWhileDragged
+  enableVerboseLogging: 1
   hoverHeight: 3
   responsiveness: 20
   hoverSurfaceMask:
@@ -225,6 +233,7 @@ MonoBehaviour:
   lateralUpdateThreshold: 0.05
   updateInterval: 0.08
   maxLookDistance: 50
+  fallbackFloorY: 0
 --- !u!114 &8003668939973838165
 MonoBehaviour:
   m_ObjectHideFlags: 0
