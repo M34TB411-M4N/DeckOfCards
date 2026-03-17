@@ -3,22 +3,23 @@ using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
-public class PauseMenu : MonoBehaviour {
+// THE FIX: Changed from MonoBehaviour to NetworkBehaviour
+public class PauseMenu : NetworkBehaviour {
     [Header("UI Panels")]
     [SerializeField] private GameObject pausePanel;
-    [SerializeField] private GameObject rulesPanel; // If you have a separate rules sub-menu
+    [SerializeField] private GameObject rulesPanel;
 
     [Header("Controllers to Disable")]
     [SerializeField] private ObjectSelect objectSelect;
 
     private bool isPaused = false;
+
     [Header("Spawning")]
     [SerializeField] private GameObject deckPrefab;
     [SerializeField] private float defaultSpawnDistance = 10f;
-    [SerializeField] private float spawnHeightOffset = 2f; // Spawn slightly above table so it drops in
+    [SerializeField] private float spawnHeightOffset = 2f;
 
     void Start() {
-        // Ensure the menu is hidden on start
         if (pausePanel != null) pausePanel.SetActive(false);
         if (rulesPanel != null) rulesPanel.SetActive(false);
     }
@@ -35,7 +36,7 @@ public class PauseMenu : MonoBehaviour {
 
     private void PauseGame() {
         pausePanel.SetActive(true);
-        Time.timeScale = 0f; // Freezes physics and FixedUpdate
+        Time.timeScale = 0f;
 
         if (objectSelect != null) objectSelect.enabled = false;
     }
@@ -54,15 +55,27 @@ public class PauseMenu : MonoBehaviour {
 
     public void OnAddDeckPressed() {
         Vector3 spawnPosition = CalculateSpawnPosition();
+        Quaternion spawnRotation = Quaternion.Euler(0, Camera.main.transform.eulerAngles.y, 0);
 
-        // Instantiate the deck
-        GameObject newDeck = Instantiate(deckPrefab, spawnPosition, Quaternion.identity);
+        // THE FIX: Ask the server to spawn the deck, don't do it locally!
+        RequestSpawnDeckServerRpc(spawnPosition, spawnRotation);
 
-        // Optional: If you want it to land flat, reset rotation
-        newDeck.transform.rotation = Quaternion.Euler(0, Camera.main.transform.eulerAngles.y, 0);
+        Debug.Log($"Requested deck spawn at {spawnPosition}");
+        ResumeGame();
+    }
 
-        Debug.Log($"Deck spawned at {spawnPosition}");
-        ResumeGame(); // Close menu after adding
+    [ServerRpc(RequireOwnership = false)]
+    private void RequestSpawnDeckServerRpc(Vector3 position, Quaternion rotation) {
+        // 1. The Server physically instantiates the object
+        GameObject newDeck = Instantiate(deckPrefab, position, rotation);
+
+        // 2. The Server officially registers it with the network so everyone sees it!
+        NetworkObject netObj = newDeck.GetComponent<NetworkObject>();
+        if (netObj != null) {
+            netObj.Spawn();
+        } else {
+            Debug.LogError("<color=red>[Network Error]</color> Deck prefab is missing a NetworkObject component!");
+        }
     }
 
     public void OnViewRulesPressed() {
@@ -78,45 +91,33 @@ public class PauseMenu : MonoBehaviour {
     }
 
     public void OnLeaveGamePressed() {
-        Time.timeScale = 1f; // Always reset time before changing scenes!
+        Time.timeScale = 1f;
         if (NetworkManager.Singleton != null && NetworkManager.Singleton.IsListening) {
-
-            // 2. Sever all connections and kill the server/client
             NetworkManager.Singleton.Shutdown();
-
-            // 3. (Optional but recommended) Destroy the NetworkManager object completely 
-            // to ensure a 100% clean slate the next time they click "Host" or "Join"
             Destroy(NetworkManager.Singleton.gameObject);
         }
 
-        // 4. Now it is safe to load the Main Menu!
-        SceneManager.LoadScene("MainMenu"); // Replace with your actual Main Menu scene name
+        SceneManager.LoadScene("MainMenu");
     }
 
     private Vector3 CalculateSpawnPosition() {
         Camera cam = Camera.main;
-        // 1. Define the ray from the center of the screen
         Ray ray = cam.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0));
 
-        // 2. Define a mathematical plane at the table's Y level (assuming Y=0 or floor height)
-        // Find the floor Y from your existing logic or a serialized field
         float tableY = 0f;
         GameObject floor = GameObject.FindGameObjectWithTag("Floor");
         if (floor != null) tableY = floor.transform.position.y;
 
         Plane tablePlane = new Plane(Vector3.up, new Vector3(0, tableY, 0));
 
-        // 3. Try to intersect the ray with the plane
         if (tablePlane.Raycast(ray, out float enter)) {
-            // Limit how far away they can spawn a deck so it's not miles away
             if (enter <= defaultSpawnDistance * 2f) {
                 return ray.GetPoint(enter) + Vector3.up * spawnHeightOffset;
             }
         }
 
-        // 4. Fallback: If looking at sky or too far, spawn in front of camera
         Vector3 fallbackPos = cam.transform.position + cam.transform.forward * defaultSpawnDistance;
-        fallbackPos.y = tableY + spawnHeightOffset; // Keep it at a reasonable height
+        fallbackPos.y = tableY + spawnHeightOffset;
         return fallbackPos;
     }
 }

@@ -552,7 +552,7 @@ MonoBehaviour:
   padding: 0.1
   maxHandWidth: 4
   cardThickness: 0.03
-  standingRotation: {x: -90, y: 0, z: 0}
+  standingRotation: {x: -90, y: 180, z: 0}
   transitionSpeed: 8
   cardsInHand: []
   cameraAnchor: {fileID: 1413695056}
@@ -1115,7 +1115,7 @@ MonoBehaviour:
   padding: 0.1
   maxHandWidth: 4
   cardThickness: 0.03
-  standingRotation: {x: -90, y: 0, z: 0}
+  standingRotation: {x: -90, y: 180, z: 0}
   transitionSpeed: 8
   cardsInHand: []
   cameraAnchor: {fileID: 875407231}
@@ -4194,7 +4194,7 @@ MonoBehaviour:
   padding: 0.1
   maxHandWidth: 4
   cardThickness: 0.03
-  standingRotation: {x: -90, y: 0, z: 0}
+  standingRotation: {x: -90, y: 180, z: 0}
   transitionSpeed: 8
   cardsInHand: []
   cameraAnchor: {fileID: 1700094474}
@@ -6245,7 +6245,7 @@ MonoBehaviour:
   padding: 0.1
   maxHandWidth: 4
   cardThickness: 0.03
-  standingRotation: {x: -90, y: 0, z: 0}
+  standingRotation: {x: -90, y: 180, z: 0}
   transitionSpeed: 8
   cardsInHand: []
   cameraAnchor: {fileID: 2019623686}
@@ -6728,7 +6728,7 @@ MonoBehaviour:
   padding: 0.1
   maxHandWidth: 4
   cardThickness: 0.03
-  standingRotation: {x: -90, y: 0, z: 0}
+  standingRotation: {x: -90, y: 180, z: 0}
   transitionSpeed: 8
   cardsInHand: []
   cameraAnchor: {fileID: 1761253832}
@@ -9063,7 +9063,7 @@ MonoBehaviour:
   padding: 0.1
   maxHandWidth: 4
   cardThickness: 0.03
-  standingRotation: {x: -90, y: 0, z: 0}
+  standingRotation: {x: -90, y: 180, z: 0}
   transitionSpeed: 8
   cardsInHand: []
   cameraAnchor: {fileID: 1605613661}
@@ -10055,7 +10055,7 @@ MonoBehaviour:
   padding: 0.1
   maxHandWidth: 4
   cardThickness: 0.03
-  standingRotation: {x: -90, y: 0, z: 0}
+  standingRotation: {x: -90, y: 180, z: 0}
   transitionSpeed: 8
   cardsInHand: []
   cameraAnchor: {fileID: 1286767811}
@@ -10174,7 +10174,7 @@ MonoBehaviour:
   padding: 0.1
   maxHandWidth: 4
   cardThickness: 0.03
-  standingRotation: {x: -90, y: 0, z: 0}
+  standingRotation: {x: -90, y: 180, z: 0}
   transitionSpeed: 8
   cardsInHand: []
   cameraAnchor: {fileID: 1829772710}
@@ -11286,6 +11286,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 1443461921}
+  - component: {fileID: 1443461923}
   - component: {fileID: 1443461922}
   m_Layer: 5
   m_Name: PauseMenu
@@ -11328,12 +11329,38 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: df51c91b8f0d96c43a311d0d4026bf35, type: 3}
   m_Name: 
   m_EditorClassIdentifier: '::'
+  ShowTopMostFoldoutHeaderGroup: 1
   pausePanel: {fileID: 293907684}
-  rulesPanel: {fileID: 0}
+  rulesPanel: {fileID: 986363513}
   objectSelect: {fileID: 1782618114}
-  deckPrefab: {fileID: 2917818905663290176, guid: 768fb08c3eb14d6469348a03fc918aa3, type: 3}
+  deckPrefab: {fileID: 5785056385212413213, guid: 9906bb83fa6f44647b3b0d5bcad0d6f0, type: 3}
   defaultSpawnDistance: 10
   spawnHeightOffset: 2
+--- !u!114 &1443461923
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1443461920}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d5a57f767e5e46a458fc5d3c628d0cbb, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Unity.Netcode.Runtime::Unity.Netcode.NetworkObject
+  GlobalObjectIdHash: 2224323704
+  InScenePlacedSourceGlobalObjectIdHash: 0
+  DeferredDespawnTick: 0
+  Ownership: 1
+  AlwaysReplicateAsRoot: 0
+  SynchronizeTransform: 1
+  ActiveSceneSynchronization: 0
+  SceneMigrationSynchronization: 0
+  SpawnWithObservers: 1
+  DontDestroyWithOwner: 0
+  AutoObjectParentSync: 1
+  SyncOwnerTransformWhenParented: 1
+  AllowOwnerToParent: 0
 --- !u!1 &1455529119
 GameObject:
   m_ObjectHideFlags: 0

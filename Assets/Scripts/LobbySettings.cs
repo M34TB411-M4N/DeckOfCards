@@ -6,6 +6,10 @@ using Unity.Collections;
 using System.Collections;
 
 public class LobbySettings : NetworkBehaviour {
+    [Header("Relay UI")]
+    [Tooltip("Drag the TextMeshPro text here that will display the Join Code!")]
+    public TextMeshProUGUI joinCodeTextDisplay;
+
     [Header("Host Settings UI")]
     public TMP_Dropdown playerDropdown;
 
@@ -39,6 +43,16 @@ public class LobbySettings : NetworkBehaviour {
     }
 
     public override void OnNetworkSpawn() {
+        // --- DISPLAY THE RELAY CODE ---
+        if (joinCodeTextDisplay != null) {
+            if (IsServer) {
+                joinCodeTextDisplay.text = "JOIN CODE: " + GameSessionData.RelayJoinCode;
+            } else {
+                joinCodeTextDisplay.text = "Connected via Relay!";
+            }
+        }
+        // ------------------------------
+
         if (IsServer) {
             lobbyPlayers.Clear();
             NetworkManager.Singleton.OnClientConnectedCallback += HandleClientConnected;
@@ -118,7 +132,6 @@ public class LobbySettings : NetworkBehaviour {
             return;
         }
 
-        // THE FIX: Save to global vault
         GameSessionData.PlayerName = newName;
         UpdatePlayerNameServerRpc(newName);
     }
@@ -178,10 +191,7 @@ public class LobbySettings : NetworkBehaviour {
         foreach (var player in lobbyPlayers) {
             if (!hasSetInitialName && nameInputField != null && player.ClientId == NetworkManager.Singleton.LocalClientId) {
                 nameInputField.text = player.PlayerName.ToString();
-
-                // THE FIX: Save the initial default name to global vault
                 GameSessionData.PlayerName = player.PlayerName.ToString();
-
                 hasSetInitialName = true;
             }
 

@@ -25,13 +25,13 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 4232776466097475600}
   serializedVersion: 2
-  m_LocalRotation: {x: -0.7071068, y: 0, z: 0, w: 0.7071068}
-  m_LocalPosition: {x: 0, y: -0.51, z: 0}
+  m_LocalRotation: {x: 0.7071068, y: 0, z: 0, w: 0.7071068}
+  m_LocalPosition: {x: 0, y: 0.51, z: 0}
   m_LocalScale: {x: 1, y: 0.74, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 1682269659211656872}
-  m_LocalEulerAnglesHint: {x: -90, y: 0, z: 0}
+  m_LocalEulerAnglesHint: {x: 90, y: 0, z: 0}
 --- !u!212 &1787914229435187168
 SpriteRenderer:
   serializedVersion: 2
@@ -127,8 +127,8 @@ Transform:
   m_LocalScale: {x: 2.6, y: 0.75, z: 3.5}
   m_ConstrainProportionsScale: 0
   m_Children:
-  - {fileID: 8764713063409999249}
   - {fileID: 8221949171756502628}
+  - {fileID: 8764713063409999249}
   - {fileID: 1959096691086177839}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
@@ -192,6 +192,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: aa09cf60674d11549b983c5df6ebc101, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::HoverWhileDragged
+  enableVerboseLogging: 0
   hoverHeight: 3
   responsiveness: 20
   hoverSurfaceMask:
@@ -200,6 +201,7 @@ MonoBehaviour:
   lateralUpdateThreshold: 0.05
   updateInterval: 0.08
   maxLookDistance: 50
+  fallbackFloorY: 0
 --- !u!114 &729122450893121249
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -225,7 +227,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d5a57f767e5e46a458fc5d3c628d0cbb, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Unity.Netcode.Runtime::Unity.Netcode.NetworkObject
-  GlobalObjectIdHash: 2168358089
+  GlobalObjectIdHash: 3115457336
   InScenePlacedSourceGlobalObjectIdHash: 0
   DeferredDespawnTick: 0
   Ownership: 1
@@ -263,7 +265,7 @@ MonoBehaviour:
   dealSpeed: 0.15
   deckMesh: {fileID: 1682269659211656872}
   faceRenderer: {fileID: 6334054994333043659}
-  maxDeckHeight: 0.2
+  singleCardThickness: 0.0144
   cardCount: 0
 --- !u!114 &-3884446559081236608
 MonoBehaviour:
@@ -336,13 +338,13 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 7082430873962536335}
   serializedVersion: 2
-  m_LocalRotation: {x: 0.7071068, y: 0, z: 0, w: 0.7071068}
-  m_LocalPosition: {x: 0, y: 0.51, z: 0}
+  m_LocalRotation: {x: -0.7071068, y: 0, z: 0, w: 0.7071068}
+  m_LocalPosition: {x: 0, y: -0.51, z: 0}
   m_LocalScale: {x: 1, y: 0.74, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 1682269659211656872}
-  m_LocalEulerAnglesHint: {x: 90, y: 0, z: 0}
+  m_LocalEulerAnglesHint: {x: -90, y: 0, z: 0}
 --- !u!212 &6334054994333043659
 SpriteRenderer:
   serializedVersion: 2

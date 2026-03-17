@@ -4,7 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using TMPro;
 using Unity.Netcode;
-using UnityEngine.SceneManagement; // Required for restarting/leaving
+using UnityEngine.SceneManagement;
 
 public class GoFishManager : NetworkBehaviour {
     public static GoFishManager Instance;
@@ -22,9 +22,9 @@ public class GoFishManager : NetworkBehaviour {
     [Header("End Game UI")]
     public GameObject gameOverPanel;
     public TextMeshProUGUI winnerText;
-    public GameObject hostButtons; // Put the Restart button inside this empty GameObject
-    public GameObject clientWaitText; // "Waiting for Host to restart..." text
-    public GameObject leaveButton; // The main menu button
+    public GameObject hostButtons;
+    public GameObject clientWaitText;
+    public GameObject leaveButton;
 
     [Header("Session State")]
     public NetworkVariable<int> netCurrentTurn = new NetworkVariable<int>(-1);
@@ -39,7 +39,7 @@ public class GoFishManager : NetworkBehaviour {
     }
 
     public override void OnNetworkSpawn() {
-        if (gameOverPanel != null) gameOverPanel.SetActive(false); // Hide UI on start
+        if (gameOverPanel != null) gameOverPanel.SetActive(false);
 
         if (IsServer) StartCoroutine(WaitForClientsAndSetup());
         else UpdateLog("Waiting for Host to deal...");
@@ -59,7 +59,14 @@ public class GoFishManager : NetworkBehaviour {
                 if (player == null) player = allSeats[i].gameObject.AddComponent<GoFishPlayer>();
 
                 player.seatIndex = i;
-                player.playerName = (i == 0) ? "Host" : $"Player {i + 1}";
+
+                // THE FIX: Pull the synced names directly from the GameManager's scoreboard!
+                if (i < GameManager.Instance.playerScores.Count) {
+                    player.playerName = GameManager.Instance.playerScores[i].playerName;
+                } else {
+                    player.playerName = (i == 0) ? "Host" : $"Player {i + 1}";
+                }
+
                 activePlayers.Add(player);
             }
         }
@@ -267,7 +274,10 @@ public class GoFishManager : NetworkBehaviour {
         var handData = player.GetLogicalHand();
         if (handData.Count == 0) yield break;
 
-        int requiredCards = GoFishSettings.GetMatchCount();
+        // THE FIX: Use the ScoringMode from the Lobby Settings Vault!
+        // Assuming Dropdown index 1 = Books (4 cards) and index 0 = Pairs (2 cards).
+        int requiredCards = (GameSessionData.ScoringMode == 0) ? 4 : 2;
+
         var groups = handData.GroupBy(c => c.rank).Where(g => g.Count() >= requiredCards).ToList();
         if (groups.Count == 0) yield break;
 
@@ -391,7 +401,8 @@ public class GoFishManager : NetworkBehaviour {
 
         if (allCardsLeft.Count == 0) return true;
 
-        int requiredCards = GoFishSettings.GetMatchCount();
+        // THE FIX: Check game over matches using the proper scoring mode setting!
+        int requiredCards = (GameSessionData.ScoringMode == 0) ? 4 : 2;
         bool matchPossible = allCardsLeft.GroupBy(c => c.rank).Any(g => g.Count() >= requiredCards);
 
         if (!matchPossible) return true;
@@ -408,19 +419,15 @@ public class GoFishManager : NetworkBehaviour {
         UpdateLogServerAndClient("GAME OVER!");
         ShowBannerClientRpc("GAME OVER!", 3.0f);
 
-        // Server handles the final math and triggers the UI for everyone
         if (IsServer) StartCoroutine(DetermineWinnerRoutine());
     }
 
-    // --- GAME OVER & UI LOGIC ---
-
     IEnumerator DetermineWinnerRoutine() {
-        yield return new WaitForSeconds(3.5f); // Let the "GAME OVER!" banner clear
+        yield return new WaitForSeconds(3.5f);
 
         int maxScore = -1;
         List<int> winnerIndices = new List<int>();
 
-        // Find the highest score
         for (int i = 0; i < GameManager.Instance.playerScores.Count; i++) {
             int score = GameManager.Instance.playerScores[i].score;
             if (score > maxScore) {
@@ -455,17 +462,15 @@ public class GoFishManager : NetworkBehaviour {
 
         if (winnerText != null) winnerText.text = finalMessage;
 
-        // Turn on the panel but hide the buttons for suspense
         if (gameOverPanel != null) gameOverPanel.SetActive(true);
         if (hostButtons != null) hostButtons.SetActive(false);
         if (clientWaitText != null) clientWaitText.SetActive(false);
         if (leaveButton != null) leaveButton.SetActive(false);
 
-        yield return new WaitForSeconds(2.0f); // The "little bit" of delay you asked for
+        yield return new WaitForSeconds(2.0f);
 
         if (leaveButton != null) leaveButton.SetActive(true);
 
-        // Show Host controls or Client waiting text depending on who we are
         if (IsServer) {
             if (hostButtons != null) hostButtons.SetActive(true);
         } else {
@@ -473,18 +478,13 @@ public class GoFishManager : NetworkBehaviour {
         }
     }
 
-    // --- BUTTON HOOKS ---
     public void OnRestartGameClicked() {
         if (!IsServer) return;
-        // Brutally and perfectly reset the entire game by commanding the network to reload the scene!
         NetworkManager.Singleton.SceneManager.LoadScene(SceneManager.GetActiveScene().name, LoadSceneMode.Single);
     }
 
     public void OnLeaveLobbyClicked() {
-        // Disconnect from the network and return to the main menu
         NetworkManager.Singleton.Shutdown();
-
-        // IMPORTANT: Change "MainMenu" to whatever your actual menu scene is named!
         SceneManager.LoadScene("MainMenu");
     }
 

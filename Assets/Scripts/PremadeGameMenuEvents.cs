@@ -32,17 +32,24 @@ public class PremadeGameMenuEvents : MonoBehaviour {
         Debug.Log("texas clicked");
     }
 
-    private void OnGoFishClicked(ClickEvent e) {
-        GameSessionData.SelectedMode = GameMode.GoFish;
-        NetworkManager.Singleton.StartHost();
-        NetworkManager.Singleton.SceneManager.LoadScene("LobbySettings", UnityEngine.SceneManagement.LoadSceneMode.Single);
+    private async void OnGoFishClicked(ClickEvent e) {
+        goFishButton.SetEnabled(false);
 
-        //SceneManager.LoadScene("GoFishSettings");
-        //Debug.Log("go fish clicked");
+        GameSessionData.SelectedMode = GameMode.GoFish;
+
+        // Request the Relay Server
+        string code = await RelayManager.Instance.CreateRelay(4);
+
+        if (!string.IsNullOrEmpty(code)) {
+            GameSessionData.RelayJoinCode = code; // Save the code!
+            NetworkManager.Singleton.SceneManager.LoadScene("LobbySettings", LoadSceneMode.Single);
+        } else {
+            goFishButton.SetEnabled(true);
+            Debug.LogError("Relay generation failed!");
+        }
     }
 
     private void OnBackClicked(ClickEvent e) {
         SceneManager.LoadScene("MainMenu");
-        Debug.Log("back clicked");
     }
 }

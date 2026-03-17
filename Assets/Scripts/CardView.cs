@@ -33,6 +33,9 @@ public class CardView : NetworkBehaviour {
     }
 
     private void SyncFromNetwork() {
+        // THE FIX: Safety lock to prevent the "Hearts_0" race condition!
+        if ((int)netRank.Value == 0) return;
+
         this.suit = netSuit.Value;
         this.rank = netRank.Value;
         this.card = new Card(suit, rank);
@@ -48,6 +51,13 @@ public class CardView : NetworkBehaviour {
                     gameObject.tag = "MoveableObject";
                     hand.gameObject.SetActive(true);
                     hand.AddCard(this);
+
+                    // THE FIX: Stop gravity from ripping the card out of the hand!
+                    if (TryGetComponent<Rigidbody>(out var rb)) {
+                        rb.isKinematic = true;
+                        rb.linearVelocity = Vector3.zero;
+                        rb.angularVelocity = Vector3.zero;
+                    }
                 }
             }
         }
@@ -78,7 +88,9 @@ public class CardView : NetworkBehaviour {
 
     void UpdateVisuals() {
         if (faceRenderer == null) return;
-        if (card == null) return;
+
+        // Secondary safety lock just in case UpdateVisuals is called forcefully early
+        if (card == null || (int)card.rank == 0) return;
 
         if (currentlyHidden && GoFishManager.Instance != null) {
             if (hiddenFaceSprite != null) {

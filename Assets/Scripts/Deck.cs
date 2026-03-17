@@ -124,7 +124,7 @@ public class Deck : NetworkBehaviour {
     }
 
     private int GetCorrectDrawIndex() {
-        bool isFaceUp = (transform.eulerAngles.z < 90f || transform.eulerAngles.z > 270f);
+        bool isFaceUp = (transform.eulerAngles.z > 90f && transform.eulerAngles.z < 270f);
         return isFaceUp ? (cards.Count - 1) : 0;
     }
 
@@ -230,11 +230,20 @@ public class Deck : NetworkBehaviour {
 
     private IEnumerator DealRoutine(int count) {
         if (GameManager.Instance == null) yield break;
+
+        // 1. Ask the server exactly how many people are sitting at the table
+        int activePlayerCount = NetworkManager.Singleton.ConnectedClientsIds.Count;
+
         for (int i = 0; i < count; i++) {
-            foreach (PlayerHand seat in GameManager.Instance.allSeats) {
-                if (seat != null && seat.gameObject.activeInHierarchy) {
-                    ServerDrawCard(seat);
-                    yield return new WaitForSeconds(dealSpeed);
+            // 2. Loop through only the seats that belong to connected players!
+            for (int s = 0; s < activePlayerCount; s++) {
+                if (s < GameManager.Instance.allSeats.Count) {
+                    PlayerHand seat = GameManager.Instance.allSeats[s];
+
+                    if (seat != null) {
+                        ServerDrawCard(seat);
+                        yield return new WaitForSeconds(dealSpeed);
+                    }
                 }
             }
         }

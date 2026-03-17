@@ -2,33 +2,37 @@ using UnityEngine;
 using TMPro;
 using UnityEngine.UI;
 using Unity.Netcode;
-using Unity.Netcode.Transports.UTP;
+using System.Threading.Tasks; // REQUIRED for async
 
 public class JoinMenuEvents : MonoBehaviour {
-    [SerializeField] private TMP_InputField ipInputField;
-    [SerializeField] private TMP_InputField nameInputField; // NEW: Name field
+    [SerializeField] private TMP_InputField ipInputField; // Now used for the Join Code!
+    [SerializeField] private TMP_InputField nameInputField;
     [SerializeField] private Button joinButton;
 
     private void Start() {
-        // Load the last used name so they don't HAVE to type it every time
         nameInputField.text = PlayerPrefs.GetString("DisplayName", "New Player");
-
         joinButton.onClick.AddListener(OnJoinClicked);
     }
 
-    private void OnJoinClicked() {
-        // Save the current name in the box (allows them to change it every join)
+    private async void OnJoinClicked() {
         PlayerPrefs.SetString("DisplayName", nameInputField.text);
         PlayerPrefs.Save();
 
-        string targetIP = ipInputField.text;
-        UnityTransport transport = NetworkManager.Singleton.GetComponent<UnityTransport>();
-        transport.ConnectionData.Address = targetIP;
+        // Format the code (removes accidental spaces and makes it uppercase)
+        string joinCode = ipInputField.text.Trim().ToUpper();
+        if (string.IsNullOrWhiteSpace(joinCode)) return;
 
-        NetworkManager.Singleton.StartClient();
+        joinButton.interactable = false; // Prevent double-clicking
+
+        // Let the RelayManager do the heavy lifting!
+        bool success = await RelayManager.Instance.JoinRelay(joinCode);
+
+        if (!success) {
+            joinButton.interactable = true;
+            Debug.LogError("Failed to join Relay!");
+        }
     }
 
-    // Call this if you have a Host button somewhere too!
     public void OnHostClicked() {
         PlayerPrefs.SetString("DisplayName", nameInputField.text);
         PlayerPrefs.Save();
