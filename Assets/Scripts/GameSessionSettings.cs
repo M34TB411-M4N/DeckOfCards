@@ -1,4 +1,4 @@
-public enum GameMode { GoFish, Sandbox }
+public enum GameMode { Sandbox, Cribbage, GoFish }
 
 public static class GameSessionData {
     public static GameMode SelectedMode = GameMode.GoFish;

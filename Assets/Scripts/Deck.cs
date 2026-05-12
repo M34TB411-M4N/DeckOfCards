@@ -11,7 +11,7 @@ public class Deck : NetworkBehaviour {
 
     [Header("Deck Data")]
     [SerializeField] public List<Card> cards = new List<Card>();
-    [SerializeField] private GameObject cardPrefab;
+    public GameObject cardPrefab;
     [SerializeField] private Transform drawSpawnPoint;
     [SerializeField] private float dealSpeed = 0.15f;
 
@@ -21,6 +21,14 @@ public class Deck : NetworkBehaviour {
     [SerializeField] private float singleCardThickness = 0.0144f;
 
     public int cardCount = 0;
+
+    void Awake() {
+        // Freeze the deck the millisecond the scene loads!
+        if (TryGetComponent<Rigidbody>(out var rb)) {
+            rb.isKinematic = true;
+            rb.useGravity = false; // Ensure gravity is also strictly off
+        }
+    }
 
     public List<Card> GetCards() { return cards; }
 
@@ -36,6 +44,9 @@ public class Deck : NetworkBehaviour {
         }
 
         UpdateDeckVisuals();
+
+        // THE FIX: The 2.0 second StabilizePhysicsRoutine time bomb has been completely removed!
+        // The deck and pile will now remain safely Kinematic and locked to the table.
     }
 
     private void UpdateServerDeckState() {
@@ -97,7 +108,6 @@ public class Deck : NetworkBehaviour {
         UpdateServerDeckState();
     }
 
-    // --- THE NEW FIX: ABSORB CARD SAFELY VIA SERVER ---
     public void RequestAbsorbCard(ulong cardNetworkId) {
         AbsorbCardServerRpc(cardNetworkId);
     }
@@ -107,16 +117,12 @@ public class Deck : NetworkBehaviour {
         if (NetworkManager.Singleton.SpawnManager.SpawnedObjects.TryGetValue(cardNetworkId, out NetworkObject cardNetObj)) {
             CardView cv = cardNetObj.GetComponent<CardView>();
             if (cv != null) {
-                // Read the data and add it to the logical deck list
                 cards.Add(new Card(cv.netSuit.Value, cv.netRank.Value));
                 UpdateServerDeckState();
-
-                // Despawning it officially deletes it across all connected clients!
                 cardNetObj.Despawn();
             }
         }
     }
-    // ---------------------------------------------------
 
     public void AddCard(Card card) {
         cards.Add(card);
@@ -163,17 +169,24 @@ public class Deck : NetworkBehaviour {
         UpdateServerDeckState();
 
         GameObject newCardObj = Instantiate(cardPrefab, drawSpawnPoint.position, transform.rotation);
+
+        if (newCardObj.TryGetComponent<Collider>(out var col)) col.enabled = false;
+        if (newCardObj.TryGetComponent<Rigidbody>(out var rb)) {
+            rb.isKinematic = true;
+            rb.useGravity = false;
+            rb.linearVelocity = Vector3.zero;
+        }
+
+        CardView cv = newCardObj.GetComponent<CardView>();
+        int seatIndex = GameManager.Instance.allSeats.IndexOf(targetHand);
+        cv.netSuit.Value = topCardData.suit;
+        cv.netRank.Value = topCardData.rank;
+        cv.netTargetHand.Value = seatIndex;
+
         NetworkObject netObj = newCardObj.GetComponent<NetworkObject>();
         NetworkObject handNetObj = targetHand.GetComponent<NetworkObject>();
 
         netObj.SpawnWithOwnership(handNetObj.OwnerClientId);
-
-        int seatIndex = GameManager.Instance.allSeats.IndexOf(targetHand);
-
-        CardView cv = newCardObj.GetComponent<CardView>();
-        cv.netSuit.Value = topCardData.suit;
-        cv.netRank.Value = topCardData.rank;
-        cv.netTargetHand.Value = seatIndex;
 
         return topCardData;
     }
@@ -202,7 +215,8 @@ public class Deck : NetworkBehaviour {
         cv.netTargetHand.Value = -1;
 
         if (newCardGO.TryGetComponent<Rigidbody>(out var rb)) {
-            rb.isKinematic = false;
+            rb.isKinematic = true; // Lock it so it doesn't fall through the table
+            rb.useGravity = false;
         }
     }
 
@@ -231,11 +245,9 @@ public class Deck : NetworkBehaviour {
     private IEnumerator DealRoutine(int count) {
         if (GameManager.Instance == null) yield break;
 
-        // 1. Ask the server exactly how many people are sitting at the table
         int activePlayerCount = NetworkManager.Singleton.ConnectedClientsIds.Count;
 
         for (int i = 0; i < count; i++) {
-            // 2. Loop through only the seats that belong to connected players!
             for (int s = 0; s < activePlayerCount; s++) {
                 if (s < GameManager.Instance.allSeats.Count) {
                     PlayerHand seat = GameManager.Instance.allSeats[s];

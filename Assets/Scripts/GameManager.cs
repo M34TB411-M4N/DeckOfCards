@@ -67,7 +67,8 @@ public class GameManager : NetworkBehaviour {
         if (IsServer) {
             clientNames[NetworkManager.ServerClientId] = GameSessionData.PlayerName;
 
-            if (FindAnyObjectByType<GoFishManager>() == null) {
+            // THE FIX: Tell GameManager to ignore Sandbox setup if GoFish OR Cribbage is running!
+            if (FindAnyObjectByType<GoFishManager>() == null && FindAnyObjectByType<CribbageManager>() == null) {
                 StartCoroutine(WaitForSandboxPlayersRoutine());
             }
         } else {
@@ -78,7 +79,6 @@ public class GameManager : NetworkBehaviour {
         netPlayerCount.OnValueChanged += (oldVal, newVal) => UpdateSeatVisibility(newVal);
         UpdateSeatVisibility(netPlayerCount.Value);
     }
-
     // --- NAME SYNCING LOGIC ---
     [ServerRpc(RequireOwnership = false)]
     private void RegisterNameServerRpc(string pName, ServerRpcParams rpcParams = default) {

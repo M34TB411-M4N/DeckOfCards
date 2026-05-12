@@ -22,18 +22,15 @@ public class CardView : NetworkBehaviour {
     private bool currentlyHidden = true;
 
     public override void OnNetworkSpawn() {
-        // Instantly apply data the moment it spawns on the client
         SyncFromNetwork();
         HandleHandAssignment();
 
-        // Listen for future changes
         netSuit.OnValueChanged += (oldVal, newVal) => SyncFromNetwork();
         netRank.OnValueChanged += (oldVal, newVal) => SyncFromNetwork();
         netTargetHand.OnValueChanged += (oldVal, newVal) => HandleHandAssignment();
     }
 
     private void SyncFromNetwork() {
-        // THE FIX: Safety lock to prevent the "Hearts_0" race condition!
         if ((int)netRank.Value == 0) return;
 
         this.suit = netSuit.Value;
@@ -42,7 +39,6 @@ public class CardView : NetworkBehaviour {
         UpdateVisuals();
     }
 
-    // Automatically jumps into the correct hand based on the NetworkVariable!
     private void HandleHandAssignment() {
         if (netTargetHand.Value >= 0 && GameManager.Instance != null) {
             if (netTargetHand.Value < GameManager.Instance.allSeats.Count) {
@@ -52,7 +48,6 @@ public class CardView : NetworkBehaviour {
                     hand.gameObject.SetActive(true);
                     hand.AddCard(this);
 
-                    // THE FIX: Stop gravity from ripping the card out of the hand!
                     if (TryGetComponent<Rigidbody>(out var rb)) {
                         rb.isKinematic = true;
                         rb.linearVelocity = Vector3.zero;
@@ -73,11 +68,22 @@ public class CardView : NetworkBehaviour {
     }
 
     void Update() {
-        if (GoFishManager.Instance == null || GameManager.Instance == null) return;
+        if (GameManager.Instance == null) return;
 
-        bool shouldBeHidden = true;
-        if (GameManager.Instance.MyHand != null && GameManager.Instance.MyHand.cardsInHand.Contains(this)) {
-            shouldBeHidden = false;
+        bool shouldBeHidden = false;
+
+        if (netTargetHand.Value >= 0) {
+            if (netTargetHand.Value != GameManager.Instance.myPlayerIndex) {
+                shouldBeHidden = true;
+            }
+        }
+
+        // THE FIX: If it is The Show or GameOver, force ALL cards to be visible!
+        if (CribbageManager.Instance != null) {
+            if (CribbageManager.Instance.CurrentPhase == CribbageManager.GamePhase.TheShow ||
+                CribbageManager.Instance.CurrentPhase == CribbageManager.GamePhase.GameOver) {
+                shouldBeHidden = false;
+            }
         }
 
         if (shouldBeHidden != currentlyHidden) {
@@ -88,11 +94,10 @@ public class CardView : NetworkBehaviour {
 
     void UpdateVisuals() {
         if (faceRenderer == null) return;
-
-        // Secondary safety lock just in case UpdateVisuals is called forcefully early
         if (card == null || (int)card.rank == 0) return;
 
-        if (currentlyHidden && GoFishManager.Instance != null) {
+        // THE FIX 2: Removed GoFish dependency for rendering visuals
+        if (currentlyHidden) {
             if (hiddenFaceSprite != null) {
                 faceRenderer.sprite = hiddenFaceSprite;
                 faceRenderer.color = Color.white;

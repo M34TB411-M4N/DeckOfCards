@@ -24,10 +24,22 @@ public class PremadeGameMenuEvents : MonoBehaviour {
         backButton.RegisterCallback<ClickEvent>(OnBackClicked);
     }
 
-    private void OnCribbageClicked(ClickEvent e) {
-        Debug.Log("cribbage clicked");
-    }
+    private async void OnCribbageClicked(ClickEvent e) {
+        cribbageButton.SetEnabled(false);
+        GameSessionData.SelectedMode = GameMode.Cribbage;
 
+        // Request a 2-player Relay
+        string code = await RelayManager.Instance.CreateRelay(2);
+
+        if (!string.IsNullOrEmpty(code)) {
+            GameSessionData.RelayJoinCode = code;
+            // THE FIX: Route to the Lobby Settings first!
+            NetworkManager.Singleton.SceneManager.LoadScene("LobbySettings", LoadSceneMode.Single);
+        } else {
+            cribbageButton.SetEnabled(true);
+            Debug.LogError("Relay generation failed!");
+        }
+    }
     private void OnTexasHoldEmClicked(ClickEvent e) {
         Debug.Log("texas clicked");
     }
@@ -37,7 +49,6 @@ public class PremadeGameMenuEvents : MonoBehaviour {
 
         GameSessionData.SelectedMode = GameMode.GoFish;
 
-        // Request the Relay Server
         string code = await RelayManager.Instance.CreateRelay(4);
 
         if (!string.IsNullOrEmpty(code)) {

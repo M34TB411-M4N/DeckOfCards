@@ -70,11 +70,57 @@ public class ObjectSelect : MonoBehaviour {
 
     void Update() {
         if (GoFishManager.Instance != null) return;
+
+        if (CribbageManager.Instance != null) {
+            HandleCribbagePointer();
+            return; 
+        }
+
         HandlePointer();
+    }
+
+    private void HandleCribbagePointer() {
+        if (PointerDown() && !IsPointerOverUI()) {
+            GameObject hit = RaycastWorldObject();
+            if (hit != null) {
+                CardView card = hit.GetComponent<CardView>();
+
+                // 1. Make sure we actually clicked a card and our hand exists
+                if (card == null || GameManager.Instance.MyHand == null) return;
+
+                // 2. THE STRICT OWNERSHIP FILTER: 
+                // If this card is NOT in my physical hand, completely ignore the click!
+                if (!GameManager.Instance.MyHand.cardsInHand.Contains(card)) {
+                    return;
+                }
+
+                // 3. --- DISCARD PHASE ---
+                if (CribbageManager.Instance.CurrentPhase == CribbageManager.GamePhase.DiscardToCrib) {
+                    GameManager.Instance.MyHand.ToggleEmphasize(card);
+                }
+
+                // 4. --- PEGGING PHASE ---
+                else if (CribbageManager.Instance.CurrentPhase == CribbageManager.GamePhase.Pegging) {
+
+                    // Is it actually my turn?
+                    if (CribbageManager.Instance.activeTurnSeat.Value == GameManager.Instance.myPlayerIndex) {
+
+                        int cardValue = card.GetCardData().rank >= Rank.Ten ? 10 : (int)card.GetCardData().rank;
+                        if (CribbageManager.Instance.peggingTotal.Value + cardValue > 31) {
+                            return;
+                        }
+                        ulong cardNetId = card.GetComponent<NetworkObject>().NetworkObjectId;
+                        GameManager.Instance.MyHand.RemoveCard(card);
+                        CribbageManager.Instance.PlayCardForPeggingServerRpc(cardNetId, GameManager.Instance.myPlayerIndex);
+                    }
+                }
+            }
+        }
     }
 
     void FixedUpdate() {
         if (GoFishManager.Instance != null) return;
+        if (CribbageManager.Instance != null) return;
         if (state == InputState.Dragging && draggedRb != null) {
             ApplyDragVelocity();
             ApplySoftBounds();
@@ -327,14 +373,20 @@ public class ObjectSelect : MonoBehaviour {
     public GameObject RaycastWorldObject() {
         Ray ray = Camera.main.ScreenPointToRay(PointerPosition());
         RaycastHit[] hits = Physics.RaycastAll(ray, 100f);
+
         System.Array.Sort(hits, (x, y) => x.distance.CompareTo(y.distance));
+
         foreach (var hit in hits) {
-            if (hit.collider.CompareTag("MoveableObject")) return hit.collider.gameObject;
+            if (hit.collider.CompareTag("MoveableObject")) {
+                return hit.collider.gameObject;
+            }
+        }
+
+        foreach (var hit in hits) {
             if (hit.collider.CompareTag("Floor")) return null;
         }
         return null;
     }
-
     public bool IsPointerOverUI() {
         if (EventSystem.current == null) return false;
         PointerEventData eventData = new PointerEventData(EventSystem.current) { position = PointerPosition() };

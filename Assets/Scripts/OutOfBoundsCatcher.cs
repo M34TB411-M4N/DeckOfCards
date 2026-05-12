@@ -5,31 +5,42 @@ public class OutOfBoundsCatcher : NetworkBehaviour {
     [Tooltip("Drag an empty GameObject here to act as the teleport destination")]
     public Transform resetPoint;
 
-    private void OnTriggerEnter(Collider other) {
-        // ONLY the Server is legally allowed to teleport networked objects!
+    // THE FIX: Change Enter to Exit! 
+    // Now this acts as a "Safe Zone Boundary" instead of a catcher trap.
+    private void OnTriggerExit(Collider other) {
         if (!IsServer) return;
 
-        // Check if the object falling is a card, deck, or pile
-        if (other.CompareTag("MoveableObject")) {
+        // THE FIX: Ignore phantom physics rebuilds. 
+        // If the object is within the boundary but its collider was just disabled/destroyed, ignore it!
+        if (!other.gameObject.activeInHierarchy || !other.enabled) {
+            return;
+        }
 
-            // Grab the NetworkObject ID
+        if (other.CompareTag("MoveableObject")) {
             NetworkObject netObj = other.GetComponent<NetworkObject>();
             if (netObj == null) netObj = other.GetComponentInParent<NetworkObject>();
 
             if (netObj != null) {
-                // 1. Teleport it back to the center of the table
-                netObj.transform.position = resetPoint.position;
+                Vector3 exitPos = other.transform.position;
+                Vector3 exitScale = other.transform.lossyScale;
 
-                // 2. Clear its rotation so it lands flat
+                if (other.TryGetComponent<Rigidbody>(out var rb) && rb.isKinematic) {
+                    Debug.Log($"<color=yellow>[Safety Net]</color> {netObj.name} exited at Pos: {exitPos} with Scale: {exitScale}. Ignored because it is Kinematic.");
+                    return;
+                }
+
+                netObj.transform.position = resetPoint.position;
                 netObj.transform.rotation = Quaternion.identity;
 
-                // 3. Kill all physics momentum so it doesn't bounce away again!
-                if (netObj.TryGetComponent<Rigidbody>(out var rb)) {
+                if (rb != null) {
                     rb.linearVelocity = Vector3.zero;
                     rb.angularVelocity = Vector3.zero;
                 }
 
-                Debug.Log($"<color=red>[Safety Net]</color> Rescued {netObj.name} from falling off the map!");
+                Debug.Log($"<color=red>[Safety Net TRIPPED]</color> Rescued {netObj.name}.\n" +
+                          $"-> Exact Exit Pos: {exitPos}\n" +
+                          $"-> Exact Scale: {exitScale}\n" +
+                          $"-> Target Reset Pos: {resetPoint.position}");
             }
         }
     }

@@ -109,10 +109,20 @@ public class LobbySettings : NetworkBehaviour {
         if (deckSettingUI != null) deckSettingUI.SetActive(false);
         if (modeSettingUI != null) modeSettingUI.SetActive(false);
 
+        // Ensure player dropdown is normally interactable for Sandbox
+        if (playerDropdown != null && IsServer) playerDropdown.interactable = true;
+
         switch (currentMode) {
             case GameMode.GoFish:
                 if (deckSettingUI != null) deckSettingUI.SetActive(true);
                 if (modeSettingUI != null) modeSettingUI.SetActive(true);
+                break;
+            case GameMode.Cribbage:
+                // THE FIX: Lock the lobby to 2 players and hide extra rules
+                if (playerDropdown != null && IsServer) {
+                    playerDropdown.value = 0; // Assuming index 0 equals 2 players
+                    playerDropdown.interactable = false; // Lock it!
+                }
                 break;
             case GameMode.Sandbox:
                 break;
@@ -219,6 +229,11 @@ public class LobbySettings : NetworkBehaviour {
         int currentPlayers = lobbyPlayers.Count;
         int decks = deckDropdown.value + 1;
 
+        // THE FIX: Force target players to 2 if Cribbage
+        if (netGameMode.Value == (int)GameMode.Cribbage) {
+            targetPlayers = 2;
+        }
+
         bool allReady = true;
         foreach (var player in lobbyPlayers) {
             if (!player.IsReady) allReady = false;
@@ -251,7 +266,7 @@ public class LobbySettings : NetworkBehaviour {
             warningText.text = (isLobbyFull && allReady) ? "Waiting for Host to start..." : "Waiting for players to ready...";
             warningText.color = (isLobbyFull && allReady) ? Color.green : Color.white;
         }
-    }
+    }   
 
     private void OnReadyClicked() => ToggleReadyServerRpc();
 
@@ -260,6 +275,9 @@ public class LobbySettings : NetworkBehaviour {
 
         if (netGameMode.Value == (int)GameMode.GoFish) {
             NetworkManager.Singleton.SceneManager.LoadScene("GoFishLobby", UnityEngine.SceneManagement.LoadSceneMode.Single);
+        } else if (netGameMode.Value == (int)GameMode.Cribbage) {
+            // THE FIX: Launch the Cribbage scene!
+            NetworkManager.Singleton.SceneManager.LoadScene("CribbageLobby", UnityEngine.SceneManagement.LoadSceneMode.Single);
         } else {
             NetworkManager.Singleton.SceneManager.LoadScene("Table", UnityEngine.SceneManagement.LoadSceneMode.Single);
         }
