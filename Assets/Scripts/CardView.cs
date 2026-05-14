@@ -58,27 +58,32 @@ public class CardView : NetworkBehaviour {
         }
     }
 
-    public Card GetCardData() { return card; }
-
-    public void SetCardData(Card card) {
-        this.card = card;
-        this.rank = card.rank;
-        this.suit = card.suit;
-        UpdateVisuals();
+    // --- VISIBILITY FIX: New RPCs to let players sync hand assignments ---
+    public void NetworkUpdateTargetHand(int newTargetSeat) {
+        if (IsServer) netTargetHand.Value = newTargetSeat;
+        else UpdateTargetHandServerRpc(newTargetSeat);
     }
+
+    [ServerRpc(RequireOwnership = false)]
+    private void UpdateTargetHandServerRpc(int newTargetSeat) {
+        netTargetHand.Value = newTargetSeat;
+    }
+
+    public Card GetCardData() { return card; }
 
     void Update() {
         if (GameManager.Instance == null) return;
 
         bool shouldBeHidden = false;
 
+        // Hide it if it's securely inside an opponent's hand
         if (netTargetHand.Value >= 0) {
             if (netTargetHand.Value != GameManager.Instance.myPlayerIndex) {
                 shouldBeHidden = true;
             }
         }
 
-        // THE FIX: If it is The Show or GameOver, force ALL cards to be visible!
+        // FORCE VISIBILITY: If the game is scoring, ALL cards are visible to everyone
         if (CribbageManager.Instance != null) {
             if (CribbageManager.Instance.CurrentPhase == CribbageManager.GamePhase.TheShow ||
                 CribbageManager.Instance.CurrentPhase == CribbageManager.GamePhase.GameOver) {
@@ -96,7 +101,6 @@ public class CardView : NetworkBehaviour {
         if (faceRenderer == null) return;
         if (card == null || (int)card.rank == 0) return;
 
-        // THE FIX 2: Removed GoFish dependency for rendering visuals
         if (currentlyHidden) {
             if (hiddenFaceSprite != null) {
                 faceRenderer.sprite = hiddenFaceSprite;
@@ -123,8 +127,6 @@ public class CardView : NetworkBehaviour {
             }
         }
     }
-
-    public void OnClicked() { }
 
     public void Flip() {
         if (IsServer) FlipClientRpc();
@@ -173,4 +175,5 @@ public class CardView : NetworkBehaviour {
         if (TryGetComponent<NetworkObject>(out var myNetObj)) myNetObj.Despawn();
         else Destroy(gameObject);
     }
+
 }

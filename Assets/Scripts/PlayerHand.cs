@@ -34,9 +34,15 @@ public class PlayerHand : NetworkBehaviour {
     }
 
     public void UpdateNameText(string newName) {
-        if (nameTextDisplay != null) nameTextDisplay.text = newName;
-    }
+        Debug.Log($"[PlayerHand] UpdateNameText called with: '{newName}' on GameObject: {gameObject.name}");
 
+        if (nameTextDisplay != null) {
+            nameTextDisplay.text = newName;
+            Debug.Log($"[PlayerHand] SUCCESS! Changed 3D text to '{newName}' on {gameObject.name}");
+        } else {
+            Debug.LogError($"[PlayerHand FATAL] nameTextDisplay is NULL on {gameObject.name}! The script received the name '{newName}', but doesn't know which TextMeshPro object to change. Please drag the Text object into the PlayerHand script in the Unity Inspector.");
+        }
+    }
     public void AddCard(CardView card) {
         if (card == null) return;
         if (!cardsInHand.Contains(card)) {
@@ -44,6 +50,12 @@ public class PlayerHand : NetworkBehaviour {
 
             if (GoFishManager.Instance != null || CribbageManager.Instance != null) {
                 SortHandByRank();
+            }
+
+            // VISIBILITY FIX: Tell the network this card is now securely in this specific hand!
+            if (GameManager.Instance != null) {
+                int mySeatIndex = GameManager.Instance.allSeats.IndexOf(this);
+                card.NetworkUpdateTargetHand(mySeatIndex);
             }
 
             if (card.TryGetComponent<Rigidbody>(out var rb)) {
@@ -65,7 +77,12 @@ public class PlayerHand : NetworkBehaviour {
             cardsInHand.Remove(card);
             if (emphasizedCards.Contains(card)) emphasizedCards.Remove(card); // Clean up if removed
 
-            if (GoFishManager.Instance == null && CribbageManager.Instance == null) {
+            // VISIBILITY FIX: Tell the network this card has left the hand and should be face up!
+            card.NetworkUpdateTargetHand(-1);
+
+            // PHYSICS REVERT: Allow the card to have physics again when removed from the hand!
+            // I removed the CribbageManager lock here so sandbox dropping works beautifully again.
+            if (GoFishManager.Instance == null) {
                 if (card.TryGetComponent<Rigidbody>(out var rb)) rb.isKinematic = false;
                 if (card.TryGetComponent<Collider>(out var col)) {
                     col.enabled = true;
@@ -105,6 +122,7 @@ public class PlayerHand : NetworkBehaviour {
             .OrderBy(c => c.GetCardData() != null ? (int)c.GetCardData().rank : 999)
             .ToList();
     }
+
     private void ArrangeCards() {
         cardsInHand.RemoveAll(c => c == null);
         int count = cardsInHand.Count;
@@ -165,4 +183,4 @@ public class PlayerHand : NetworkBehaviour {
             GameManager.Instance.myPlayerIndex = GameManager.Instance.allSeats.IndexOf(this);
         }
     }
-}       
+}

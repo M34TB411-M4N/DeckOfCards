@@ -23,10 +23,9 @@ public class Deck : NetworkBehaviour {
     public int cardCount = 0;
 
     void Awake() {
-        // Freeze the deck the millisecond the scene loads!
         if (TryGetComponent<Rigidbody>(out var rb)) {
             rb.isKinematic = true;
-            rb.useGravity = false; // Ensure gravity is also strictly off
+            rb.useGravity = true; // GRAVITY FIX: Restored to true!
         }
     }
 
@@ -44,9 +43,6 @@ public class Deck : NetworkBehaviour {
         }
 
         UpdateDeckVisuals();
-
-        // THE FIX: The 2.0 second StabilizePhysicsRoutine time bomb has been completely removed!
-        // The deck and pile will now remain safely Kinematic and locked to the table.
     }
 
     private void UpdateServerDeckState() {
@@ -173,7 +169,7 @@ public class Deck : NetworkBehaviour {
         if (newCardObj.TryGetComponent<Collider>(out var col)) col.enabled = false;
         if (newCardObj.TryGetComponent<Rigidbody>(out var rb)) {
             rb.isKinematic = true;
-            rb.useGravity = false;
+            rb.useGravity = true; // GRAVITY FIX: Restored to true
             rb.linearVelocity = Vector3.zero;
         }
 
@@ -215,8 +211,8 @@ public class Deck : NetworkBehaviour {
         cv.netTargetHand.Value = -1;
 
         if (newCardGO.TryGetComponent<Rigidbody>(out var rb)) {
-            rb.isKinematic = true; // Lock it so it doesn't fall through the table
-            rb.useGravity = false;
+            rb.isKinematic = true;
+            rb.useGravity = true; // GRAVITY FIX: Restored to true
         }
     }
 

@@ -554,7 +554,9 @@ MonoBehaviour:
   cardThickness: 0.03
   standingRotation: {x: -90, y: 180, z: 0}
   transitionSpeed: 8
+  emphasizeHeight: 1
   cardsInHand: []
+  emphasizedCards: []
   cameraAnchor: {fileID: 1413695056}
 --- !u!1 &52498404
 GameObject:
@@ -813,7 +815,9 @@ MonoBehaviour:
   cardThickness: 0.03
   standingRotation: {x: -90, y: 0, z: 0}
   transitionSpeed: 8
+  emphasizeHeight: 1
   cardsInHand: []
+  emphasizedCards: []
   cameraAnchor: {fileID: 0}
 --- !u!114 &53052848
 MonoBehaviour:
@@ -1117,7 +1121,9 @@ MonoBehaviour:
   cardThickness: 0.03
   standingRotation: {x: -90, y: 180, z: 0}
   transitionSpeed: 8
+  emphasizeHeight: 1
   cardsInHand: []
+  emphasizedCards: []
   cameraAnchor: {fileID: 875407231}
 --- !u!1 &141005866
 GameObject:
@@ -1349,10 +1355,10 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: 'Cribbage Rules
+  m_text: 'Rules
 
 
-    [Insert Cribbage Rules]'
+    There are no rules'
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
   m_sharedMaterial: {fileID: 2180264, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
@@ -2928,7 +2934,9 @@ MonoBehaviour:
   cardThickness: 0.03
   standingRotation: {x: -90, y: 0, z: 0}
   transitionSpeed: 8
+  emphasizeHeight: 1
   cardsInHand: []
+  emphasizedCards: []
   cameraAnchor: {fileID: 854757881}
 --- !u!114 &346525095
 MonoBehaviour:
@@ -3622,7 +3630,9 @@ MonoBehaviour:
   cardThickness: 0.03
   standingRotation: {x: -90, y: 0, z: 0}
   transitionSpeed: 8
+  emphasizeHeight: 1
   cardsInHand: []
+  emphasizedCards: []
   cameraAnchor: {fileID: 0}
 --- !u!114 &434265784
 MonoBehaviour:
@@ -4196,7 +4206,9 @@ MonoBehaviour:
   cardThickness: 0.03
   standingRotation: {x: -90, y: 180, z: 0}
   transitionSpeed: 8
+  emphasizeHeight: 1
   cardsInHand: []
+  emphasizedCards: []
   cameraAnchor: {fileID: 1700094474}
 --- !u!114 &530007627
 MonoBehaviour:
@@ -6247,7 +6259,9 @@ MonoBehaviour:
   cardThickness: 0.03
   standingRotation: {x: -90, y: 180, z: 0}
   transitionSpeed: 8
+  emphasizeHeight: 1
   cardsInHand: []
+  emphasizedCards: []
   cameraAnchor: {fileID: 2019623686}
 --- !u!1 &569583947
 GameObject:
@@ -6730,7 +6744,9 @@ MonoBehaviour:
   cardThickness: 0.03
   standingRotation: {x: -90, y: 180, z: 0}
   transitionSpeed: 8
+  emphasizeHeight: 1
   cardsInHand: []
+  emphasizedCards: []
   cameraAnchor: {fileID: 1761253832}
 --- !u!1 &605262883
 GameObject:
@@ -9065,7 +9081,9 @@ MonoBehaviour:
   cardThickness: 0.03
   standingRotation: {x: -90, y: 180, z: 0}
   transitionSpeed: 8
+  emphasizeHeight: 1
   cardsInHand: []
+  emphasizedCards: []
   cameraAnchor: {fileID: 1605613661}
 --- !u!1 &1020768953
 GameObject:
@@ -9514,7 +9532,9 @@ MonoBehaviour:
   cardThickness: 0.03
   standingRotation: {x: -90, y: 0, z: 0}
   transitionSpeed: 8
+  emphasizeHeight: 1
   cardsInHand: []
+  emphasizedCards: []
   cameraAnchor: {fileID: 0}
 --- !u!114 &1052283462
 MonoBehaviour:
@@ -10057,7 +10077,9 @@ MonoBehaviour:
   cardThickness: 0.03
   standingRotation: {x: -90, y: 180, z: 0}
   transitionSpeed: 8
+  emphasizeHeight: 1
   cardsInHand: []
+  emphasizedCards: []
   cameraAnchor: {fileID: 1286767811}
 --- !u!1 &1156161278
 GameObject:
@@ -10176,7 +10198,9 @@ MonoBehaviour:
   cardThickness: 0.03
   standingRotation: {x: -90, y: 180, z: 0}
   transitionSpeed: 8
+  emphasizeHeight: 1
   cardsInHand: []
+  emphasizedCards: []
   cameraAnchor: {fileID: 1829772710}
 --- !u!1 &1162425704
 GameObject:
@@ -10660,7 +10684,9 @@ MonoBehaviour:
   cardThickness: 0.03
   standingRotation: {x: -90, y: 0, z: 0}
   transitionSpeed: 8
+  emphasizeHeight: 1
   cardsInHand: []
+  emphasizedCards: []
   cameraAnchor: {fileID: 0}
 --- !u!114 &1317425216
 MonoBehaviour:
@@ -13327,7 +13353,9 @@ MonoBehaviour:
   cardThickness: 0.03
   standingRotation: {x: -90, y: 0, z: 0}
   transitionSpeed: 8
+  emphasizeHeight: 1
   cardsInHand: []
+  emphasizedCards: []
   cameraAnchor: {fileID: 0}
 --- !u!114 &1704584591
 MonoBehaviour:
@@ -14161,7 +14189,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 1682269659211656872, guid: 9906bb83fa6f44647b3b0d5bcad0d6f0, type: 3}
       propertyPath: m_LocalRotation.w
-      value: 0
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 1682269659211656872, guid: 9906bb83fa6f44647b3b0d5bcad0d6f0, type: 3}
       propertyPath: m_LocalRotation.x
@@ -14173,7 +14201,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 1682269659211656872, guid: 9906bb83fa6f44647b3b0d5bcad0d6f0, type: 3}
       propertyPath: m_LocalRotation.z
-      value: 1
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 1682269659211656872, guid: 9906bb83fa6f44647b3b0d5bcad0d6f0, type: 3}
       propertyPath: m_LocalEulerAnglesHint.x
@@ -14185,7 +14213,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 1682269659211656872, guid: 9906bb83fa6f44647b3b0d5bcad0d6f0, type: 3}
       propertyPath: m_LocalEulerAnglesHint.z
-      value: 180
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 3907516183502525462, guid: 9906bb83fa6f44647b3b0d5bcad0d6f0, type: 3}
       propertyPath: GlobalObjectIdHash
@@ -14529,7 +14557,9 @@ MonoBehaviour:
   cardThickness: 0.03
   standingRotation: {x: -90, y: 0, z: 0}
   transitionSpeed: 8
+  emphasizeHeight: 1
   cardsInHand: []
+  emphasizedCards: []
   cameraAnchor: {fileID: 0}
 --- !u!114 &1911778617
 MonoBehaviour:
@@ -15518,7 +15548,9 @@ MonoBehaviour:
   cardThickness: 0.03
   standingRotation: {x: -90, y: 0, z: 0}
   transitionSpeed: 8
+  emphasizeHeight: 1
   cardsInHand: []
+  emphasizedCards: []
   cameraAnchor: {fileID: 0}
 --- !u!114 &2075289976
 MonoBehaviour:

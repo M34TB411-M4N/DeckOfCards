@@ -327,7 +327,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlayerHand
   ShowTopMostFoldoutHeaderGroup: 1
-  nameTextDisplay: {fileID: 0}
+  nameTextDisplay: {fileID: 1163534605}
   cardWidth: 2
   padding: 0.1
   maxHandWidth: 4
@@ -2799,7 +2799,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: '::'
   ShowTopMostFoldoutHeaderGroup: 1
-  nameTextDisplay: {fileID: 0}
+  nameTextDisplay: {fileID: 217174544}
   cardWidth: 2
   padding: 0.1
   maxHandWidth: 4
@@ -3449,7 +3449,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlayerHand
   ShowTopMostFoldoutHeaderGroup: 1
-  nameTextDisplay: {fileID: 0}
+  nameTextDisplay: {fileID: 825807476}
   cardWidth: 2
   padding: 0.1
   maxHandWidth: 4
@@ -9249,7 +9249,7 @@ MonoBehaviour:
   m_HandleRect: {fileID: 803232539}
   m_Direction: 2
   m_Value: 1
-  m_Size: 0.28382307
+  m_Size: 0.27332303
   m_NumberOfSteps: 0
   m_OnValueChanged:
     m_PersistentCalls:
@@ -9363,7 +9363,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlayerHand
   ShowTopMostFoldoutHeaderGroup: 1
-  nameTextDisplay: {fileID: 0}
+  nameTextDisplay: {fileID: 676430052}
   cardWidth: 2
   padding: 0.1
   maxHandWidth: 4
@@ -10078,6 +10078,8 @@ MonoBehaviour:
   netCurrentTurn:
     m_InternalValue: -1
   gameInProgress: 0
+  clientsReady:
+    m_InternalValue: 0
 --- !u!114 &1130161164
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -10851,7 +10853,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlayerHand
   ShowTopMostFoldoutHeaderGroup: 1
-  nameTextDisplay: {fileID: 0}
+  nameTextDisplay: {fileID: 2066557602}
   cardWidth: 2
   padding: 0.1
   maxHandWidth: 4
@@ -13068,7 +13070,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlayerHand
   ShowTopMostFoldoutHeaderGroup: 1
-  nameTextDisplay: {fileID: 0}
+  nameTextDisplay: {fileID: 1809447863}
   cardWidth: 2
   padding: 0.1
   maxHandWidth: 4
@@ -14446,7 +14448,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlayerHand
   ShowTopMostFoldoutHeaderGroup: 1
-  nameTextDisplay: {fileID: 0}
+  nameTextDisplay: {fileID: 1008184340}
   cardWidth: 2
   padding: 0.1
   maxHandWidth: 4
@@ -15484,7 +15486,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlayerHand
   ShowTopMostFoldoutHeaderGroup: 1
-  nameTextDisplay: {fileID: 0}
+  nameTextDisplay: {fileID: 951493263}
   cardWidth: 2
   padding: 0.1
   maxHandWidth: 4

@@ -30,6 +30,9 @@ public class GoFishManager : NetworkBehaviour {
     public NetworkVariable<int> netCurrentTurn = new NetworkVariable<int>(-1);
     public bool gameInProgress = false;
 
+    // MATCHING CRIBBAGE: The network readiness tracker
+    public NetworkVariable<int> clientsReady = new NetworkVariable<int>(0);
+
     private List<GoFishPlayer> activePlayers = new List<GoFishPlayer>();
     private Coroutine reminderCoroutine;
     private Coroutine bannerCoroutine;
@@ -41,12 +44,29 @@ public class GoFishManager : NetworkBehaviour {
     public override void OnNetworkSpawn() {
         if (gameOverPanel != null) gameOverPanel.SetActive(false);
 
-        if (IsServer) StartCoroutine(WaitForClientsAndSetup());
-        else UpdateLog("Waiting for Host to deal...");
+        if (IsServer) {
+            clientsReady.Value = 0;
+            StartCoroutine(WaitForClientsAndSetup());
+        } else {
+            UpdateLog("Waiting for Host to deal...");
+        }
+
+        // MATCHING CRIBBAGE: Tell the server this client is fully loaded
+        ClientReadyServerRpc();
     }
 
+    [ServerRpc(RequireOwnership = false)]
+    private void ClientReadyServerRpc() { clientsReady.Value++; }
+
     IEnumerator WaitForClientsAndSetup() {
-        yield return new WaitForSeconds(1.5f);
+        int expectedPlayers = GameSessionData.PlayerCount > 0 ? GameSessionData.PlayerCount : 2;
+        UpdateLogServerAndClient($"Waiting for all {expectedPlayers} players to connect...");
+
+        // MATCHING CRIBBAGE: Wait securely for clients to check in
+        yield return new WaitUntil(() => clientsReady.Value >= expectedPlayers);
+        yield return new WaitForSeconds(1.0f);
+
+        // MATCHING CRIBBAGE: Let the GameManager assign seats and naturally sync the names!
         GameManager.Instance.AssignSeats();
         yield return new WaitForSeconds(0.5f);
 
@@ -60,7 +80,7 @@ public class GoFishManager : NetworkBehaviour {
 
                 player.seatIndex = i;
 
-                // THE FIX: Pull the synced names directly from the GameManager's scoreboard!
+                // Grab the name that the GameManager just synced
                 if (i < GameManager.Instance.playerScores.Count) {
                     player.playerName = GameManager.Instance.playerScores[i].playerName;
                 } else {
@@ -274,8 +294,6 @@ public class GoFishManager : NetworkBehaviour {
         var handData = player.GetLogicalHand();
         if (handData.Count == 0) yield break;
 
-        // THE FIX: Use the ScoringMode from the Lobby Settings Vault!
-        // Assuming Dropdown index 1 = Books (4 cards) and index 0 = Pairs (2 cards).
         int requiredCards = (GameSessionData.ScoringMode == 0) ? 4 : 2;
 
         var groups = handData.GroupBy(c => c.rank).Where(g => g.Count() >= requiredCards).ToList();
@@ -401,7 +419,6 @@ public class GoFishManager : NetworkBehaviour {
 
         if (allCardsLeft.Count == 0) return true;
 
-        // THE FIX: Check game over matches using the proper scoring mode setting!
         int requiredCards = (GameSessionData.ScoringMode == 0) ? 4 : 2;
         bool matchPossible = allCardsLeft.GroupBy(c => c.rank).Any(g => g.Count() >= requiredCards);
 

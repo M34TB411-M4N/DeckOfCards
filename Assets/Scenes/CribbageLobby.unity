@@ -1929,10 +1929,43 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: 'Cribbage Rules
-
-
-    [insert cheesy bread]'
+  m_text: "Cribbage Rules\n\nTHE OBJECTIVE\r\n\r\nThe goal of Cribbage is to be the
+    first player to score 121 points. Points are earned during two main phases: Pegging
+    (playing cards) and The Show (counting hands).\r\nPHASE 1: THE DEAL & THE CRIB\r\n\r\n   
+    Each player is dealt 6 cards.\r\n\r\n    Both players choose 2 cards to discard
+    face-down into the Crib.\r\n\r\n    The Crib acts as an extra hand that belongs
+    to the Dealer and is scored at the end of the round.\r\n\r\n    Players are left
+    with 4 cards each for the remainder of the round.\r\n\r\nPHASE 2: THE CUT\r\n\r\n   
+    The Non-Dealer cuts the deck, and the top card is flipped face-up. This is the
+    Starter Card.\r\n\r\n    If the Starter Card is a Jack, the Dealer instantly
+    scores 2 points (\"His Heels\").\r\n\r\n    The Starter Card is used by both
+    players and the Crib to help form scoring combinations during The Show.\r\n\r\nPHASE
+    3: PEGGING (THE PLAY)\r\n\r\nStarting with the Non-Dealer, players take turns
+    laying down one card at a time. The values of the cards are added to a Running
+    Total (Face cards = 10, Aces = 1).\r\n\r\n    The Limit: The Running Total cannot
+    exceed 31.\r\n\r\n    \"Go\": If you cannot play a card without passing 31, you
+    must click \"Go\" to pass your turn. Your opponent may continue to play cards
+    until they also cannot play.\r\n\r\n    Last Card: The last player to drop a
+    card before the total resets gets 1 point. If the total hits exactly 31, the
+    last player scores 2 points instead, and the total resets to 0.\r\n\r\nPegging
+    Points:\r\n\r\n    15: Making the running total exactly 15 scores 2 points.\r\n\r\n   
+    Pairs: Playing a card of the same rank as the previous card scores 2 points.
+    A third match scores 6 points, and a fourth scores 12 points.\r\n\r\n    Runs:
+    Playing 3 or more cards in sequential rank (e.g., 5-7-6) scores 1 point per card.
+    Order does not matter, as long as the sequence is unbroken by other ranks.\r\n\r\nPHASE
+    4: THE SHOW\r\n\r\nOnce all cards are played, players reveal their 4-card hands
+    and score them using the Starter Card as a shared 5th card.\r\nScoring happens
+    in a strict order: Non-Dealer's Hand \u2794 Dealer's Hand \u2794 Dealer's Crib.\r\n\r\nShow
+    Points:\r\n\r\n    15s: Any combination of cards adding up to 15 scores 2 points.\r\n\r\n   
+    Pairs: Any pair of matching ranks scores 2 points. (Three-of-a-kind is mathematically
+    worth 6 points; Four-of-a-kind is 12 points).\r\n\r\n    Runs: A sequence of
+    3 or more consecutive cards scores 1 point per card.\r\n\r\n    Flush: If all
+    4 cards in your hand are the same suit, score 4 points. If the Starter Card also
+    matches, score 5 points. (Note: The Crib only scores a flush if all 5 cards match).\r\n\r\n   
+    Nobs: Holding the Jack of the same suit as the Starter Card scores 1 point.\r\n\r\nROUND
+    RESET\r\nAfter the Crib is scored, the round ends. The board is cleared, the
+    Dealer role swaps to the other player, and a new round begins until someone reaches
+    121!"
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
   m_sharedMaterial: {fileID: 2180264, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
